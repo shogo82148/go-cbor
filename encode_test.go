@@ -202,6 +202,31 @@ func TestMarshal(t *testing.T) {
 			[]byte{0x01, 0x02, 0x03, 0x04},
 			[]byte{0x44, 0x01, 0x02, 0x03, 0x04},
 		},
+		{
+			"unicode string",
+			"",
+			[]byte{0x60},
+		},
+		{
+			"unicode string: \"IETF\"",
+			"IETF",
+			[]byte{0x64, 0x49, 0x45, 0x54, 0x46},
+		},
+		{
+			"unicode string: \"\"\"\\\"",
+			"\"\\",
+			[]byte{0x62, 0x22, 0x5c},
+		},
+		{
+			"unicode string: \"\u00fc\"",
+			"\u00fc",
+			[]byte{0x62, 0xc3, 0xbc},
+		},
+		{
+			"unicode string: \"\u6c34\"",
+			"\u6c34",
+			[]byte{0x63, 0xe6, 0xb0, 0xb4},
+		},
 
 		// integer types
 		{
