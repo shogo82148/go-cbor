@@ -35,6 +35,8 @@ func (s *encodeState) encode(v any) error {
 		return s.encodeFloat64(float64(v))
 	case float64:
 		return s.encodeFloat64(v)
+	case bool:
+		return s.encodeBool(v)
 	}
 	return nil
 }
@@ -199,5 +201,14 @@ func (s *encodeState) encodeFloat64(v float64) error {
 	// default to float64
 	s.writeByte(0xfb) // double-precision float (eight-byte IEEE 754)
 	s.writeUint64(f64)
+	return nil
+}
+
+func (s *encodeState) encodeBool(v bool) error {
+	if v {
+		s.writeByte(0xf5)
+	} else {
+		s.writeByte(0xf4)
+	}
 	return nil
 }

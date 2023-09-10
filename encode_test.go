@@ -171,6 +171,16 @@ func TestMarshal(t *testing.T) {
 			math.Inf(-1),
 			[]byte{0xf9, 0xfc, 0x00},
 		},
+		{
+			"false",
+			false,
+			[]byte{0xf4},
+		},
+		{
+			"true",
+			true,
+			[]byte{0xf5},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
