@@ -6,6 +6,12 @@ import (
 	"testing"
 )
 
+type customMarshaler struct{}
+
+func (m customMarshaler) MarshalCBOR() ([]byte, error) {
+	return []byte{0x01}, nil
+}
+
 func TestMarshal(t *testing.T) {
 	tests := []struct {
 		name string
@@ -227,6 +233,34 @@ func TestMarshal(t *testing.T) {
 			"\u6c34",
 			[]byte{0x63, 0xe6, 0xb0, 0xb4},
 		},
+		{
+			"array",
+			[]any{},
+			[]byte{0x80},
+		},
+		{
+			"array: [1, 2, 3]",
+			[]int{1, 2, 3},
+			[]byte{0x83, 0x01, 0x02, 0x03},
+		},
+		{
+			"array: [1, [2, 3], [4, 5]]",
+			[]any{1, []int{2, 3}, []int{4, 5}},
+			[]byte{0x83, 0x01, 0x82, 0x02, 0x03, 0x82, 0x04, 0x05},
+		},
+		{
+			"array that have 25 elements",
+			[]int{
+				1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+				11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+				21, 22, 23, 24, 25,
+			},
+			[]byte{
+				0x98, 0x19, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+				0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+				0x17, 0x18, 0x18, 0x18, 0x19,
+			},
+		},
 
 		// integer types
 		{
@@ -285,10 +319,18 @@ func TestMarshal(t *testing.T) {
 			[]byte{0x00},
 		},
 
+		// float
 		{
 			"float32",
 			float32(0),
 			[]byte{0xf9, 0x00, 0x00},
+		},
+
+		// marshaler
+		{
+			"custom marshaler",
+			customMarshaler{},
+			[]byte{0x01},
 		},
 	}
 	for _, tt := range tests {

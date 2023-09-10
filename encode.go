@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"reflect"
+	"sync"
 )
 
 func Marshal(v any) ([]byte, error) {
@@ -24,6 +26,7 @@ type encodeState struct {
 }
 
 func (s *encodeState) encode(v any) error {
+	// fast path for basic types
 	switch v := v.(type) {
 	case int8:
 		return s.encodeInt(int64(v))
@@ -61,6 +64,125 @@ func (s *encodeState) encode(v any) error {
 		return s.encodeBytes(v)
 	case string:
 		return s.encodeString(v)
+	case CBORMarshaler:
+		data, err := v.MarshalCBOR()
+		if err != nil {
+			return err
+		}
+		s.buf.Write(data)
+		return nil
+	}
+
+	return s.encodeReflectValue(reflect.ValueOf(v))
+}
+
+func (s *encodeState) encodeReflectValue(v reflect.Value) error {
+	if !v.IsValid() {
+		return s.encodeNull()
+	}
+	return typeEncoder(v.Type())(s, v)
+}
+
+type encoderFunc func(e *encodeState, v reflect.Value) error
+
+var encoderCache sync.Map // map[reflect.Type]encoderFunc
+
+func typeEncoder(t reflect.Type) encoderFunc {
+	if fi, ok := encoderCache.Load(t); ok {
+		return fi.(encoderFunc)
+	}
+
+	// To deal with recursive types, populate the map with an
+	// indirect func before we build it. This type waits on the
+	// real func (f) to be ready and then calls it. This indirect
+	// func is only used for recursive types.
+	var (
+		wg sync.WaitGroup
+		f  encoderFunc
+	)
+	wg.Add(1)
+	fi, loaded := encoderCache.LoadOrStore(t, encoderFunc(func(e *encodeState, v reflect.Value) error {
+		wg.Wait()
+		return f(e, v)
+	}))
+	if loaded {
+		return fi.(encoderFunc)
+	}
+
+	// Compute the real encoder and replace the indirect func with it.
+	f = newTypeEncoder(t)
+	wg.Done()
+	return f
+}
+
+func newTypeEncoder(t reflect.Type) encoderFunc {
+	switch t.Kind() {
+	case reflect.Bool:
+		return boolEncoder
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return intEncoder
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return uintEncoder
+	case reflect.Float32, reflect.Float64:
+		return floatEncoder
+	case reflect.String:
+		return stringEncoder
+	case reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return bytesEncoder
+		}
+		return sliceEncoder
+	}
+	return nil
+}
+
+func boolEncoder(e *encodeState, v reflect.Value) error {
+	return e.encodeBool(v.Bool())
+}
+
+func intEncoder(e *encodeState, v reflect.Value) error {
+	return e.encodeInt(v.Int())
+}
+
+func uintEncoder(e *encodeState, v reflect.Value) error {
+	return e.encodeUint(v.Uint())
+}
+
+func floatEncoder(e *encodeState, v reflect.Value) error {
+	return e.encodeFloat64(v.Float())
+}
+
+func stringEncoder(e *encodeState, v reflect.Value) error {
+	return e.encodeString(v.String())
+}
+
+func bytesEncoder(e *encodeState, v reflect.Value) error {
+	return e.encodeBytes(v.Bytes())
+}
+
+func sliceEncoder(e *encodeState, v reflect.Value) error {
+	l := v.Len()
+	switch {
+	case l < 0x17:
+		e.writeByte(byte(0x80 + l))
+	case l < 0x100:
+		e.writeByte(0x98)
+		e.writeByte(byte(l))
+	case l < 0x10000:
+		e.writeByte(0x99)
+		e.writeUint16(uint16(l))
+	case l < 0x100000000:
+		e.writeByte(0x9a)
+		e.writeUint32(uint32(l))
+	default:
+		e.writeByte(0x9b)
+		e.writeUint64(uint64(l))
+	}
+	for i := 0; i < l; i++ {
+		err := e.encode(v.Index(i).Interface())
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
