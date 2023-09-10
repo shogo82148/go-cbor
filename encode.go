@@ -25,8 +25,24 @@ type encodeState struct {
 
 func (s *encodeState) encode(v any) error {
 	switch v := v.(type) {
+	case int8:
+		return s.encodeInt(int64(v))
+	case int16:
+		return s.encodeInt(int64(v))
+	case int32:
+		return s.encodeInt(int64(v))
+	case int64:
+		return s.encodeInt(v)
 	case int:
 		return s.encodeInt(int64(v))
+	case uint8:
+		return s.encodeUint(uint64(v))
+	case uint16:
+		return s.encodeUint(uint64(v))
+	case uint32:
+		return s.encodeUint(uint64(v))
+	case uintptr:
+		return s.encodeUint(uint64(v))
 	case uint:
 		return s.encodeUint(uint64(v))
 	case uint64:

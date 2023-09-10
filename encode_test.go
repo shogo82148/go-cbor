@@ -191,6 +191,69 @@ func TestMarshal(t *testing.T) {
 			Undefined,
 			[]byte{0xf7},
 		},
+
+		// integer types
+		{
+			"int8",
+			int8(0),
+			[]byte{0x00},
+		},
+		{
+			"int16",
+			int16(0),
+			[]byte{0x00},
+		},
+		{
+			"int32",
+			int32(0),
+			[]byte{0x00},
+		},
+		{
+			"int64",
+			int64(0),
+			[]byte{0x00},
+		},
+		{
+			"uint8",
+			uint8(0),
+			[]byte{0x00},
+		},
+		{
+			"uint16",
+			uint16(0),
+			[]byte{0x00},
+		},
+		{
+			"uint32",
+			uint32(0),
+			[]byte{0x00},
+		},
+		{
+			"uint64",
+			uint64(0),
+			[]byte{0x00},
+		},
+		{
+			"uintptr",
+			uintptr(0),
+			[]byte{0x00},
+		},
+		{
+			"int",
+			int(0),
+			[]byte{0x00},
+		},
+		{
+			"uint",
+			uint(0),
+			[]byte{0x00},
+		},
+
+		{
+			"float32",
+			float32(0),
+			[]byte{0xf9, 0x00, 0x00},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
