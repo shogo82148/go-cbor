@@ -191,6 +191,17 @@ func TestMarshal(t *testing.T) {
 			Undefined,
 			[]byte{0xf7},
 		},
+		// TODO: simple values
+		{
+			"byte string",
+			[]byte(""),
+			[]byte{0x40},
+		},
+		{
+			"byte string: h'01020304'",
+			[]byte{0x01, 0x02, 0x03, 0x04},
+			[]byte{0x44, 0x01, 0x02, 0x03, 0x04},
+		},
 
 		// integer types
 		{

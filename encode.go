@@ -57,6 +57,8 @@ func (s *encodeState) encode(v any) error {
 		return s.encodeNull()
 	case undefined:
 		return s.encodeUndefined()
+	case []byte:
+		return s.encodeBytes(v)
 	}
 	return nil
 }
@@ -240,5 +242,27 @@ func (s *encodeState) encodeNull() error {
 
 func (s *encodeState) encodeUndefined() error {
 	s.writeByte(0xf7) // undefined
+	return nil
+}
+
+func (s *encodeState) encodeBytes(v []byte) error {
+	l := len(v)
+	switch {
+	case l < 0x17:
+		s.writeByte(byte(0x40 + l))
+	case l < 0x100:
+		s.writeByte(0x58)
+		s.writeByte(byte(l))
+	case l < 0x10000:
+		s.writeByte(0x59)
+		s.writeUint16(uint16(l))
+	case l < 0x100000000:
+		s.writeByte(0x5a)
+		s.writeUint32(uint32(l))
+	default:
+		s.writeByte(0x5b)
+		s.writeUint64(uint64(l))
+	}
+	s.buf.Write(v)
 	return nil
 }
