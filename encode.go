@@ -37,6 +37,10 @@ func (s *encodeState) encode(v any) error {
 		return s.encodeFloat64(v)
 	case bool:
 		return s.encodeBool(v)
+	case nil:
+		return s.encodeNull()
+	case undefined:
+		return s.encodeUndefined()
 	}
 	return nil
 }
@@ -210,5 +214,15 @@ func (s *encodeState) encodeBool(v bool) error {
 	} else {
 		s.writeByte(0xf4)
 	}
+	return nil
+}
+
+func (s *encodeState) encodeNull() error {
+	s.writeByte(0xf6) // null
+	return nil
+}
+
+func (s *encodeState) encodeUndefined() error {
+	s.writeByte(0xf7) // undefined
 	return nil
 }

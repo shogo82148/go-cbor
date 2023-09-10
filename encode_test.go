@@ -181,6 +181,16 @@ func TestMarshal(t *testing.T) {
 			true,
 			[]byte{0xf5},
 		},
+		{
+			"null",
+			nil,
+			[]byte{0xf6},
+		},
+		{
+			"undefined",
+			Undefined,
+			[]byte{0xf7},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
