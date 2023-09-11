@@ -3,6 +3,7 @@ package cbor
 import (
 	"bytes"
 	"math"
+	"math/big"
 	"testing"
 )
 
@@ -10,6 +11,14 @@ type customMarshaler struct{}
 
 func (m customMarshaler) MarshalCBOR() ([]byte, error) {
 	return []byte{0x01}, nil
+}
+
+func newBigInt(s string) *big.Int {
+	i := new(big.Int)
+	if _, ok := i.SetString(s, 0); !ok {
+		panic("failed to parse big.Int: " + s)
+	}
+	return i
 }
 
 func TestMarshal(t *testing.T) {
@@ -74,9 +83,17 @@ func TestMarshal(t *testing.T) {
 			uint64(18446744073709551615),
 			[]byte{0x1b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 		},
-		// TODO: 18446744073709551616
+		{
+			"bigint: 18446744073709551616",
+			newBigInt("18446744073709551616"),
+			[]byte{0xc2, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
 		// TODO: -18446744073709551616
-		// TODO: -18446744073709551617
+		{
+			"bigint: -18446744073709551617",
+			newBigInt("-18446744073709551617"),
+			[]byte{0xc3, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
 		{
 			"negative one",
 			int(-1),

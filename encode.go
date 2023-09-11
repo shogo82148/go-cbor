@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"math/big"
 	"reflect"
 	"sync"
 )
@@ -115,7 +116,13 @@ func typeEncoder(t reflect.Type) encoderFunc {
 	return f
 }
 
+var bigIntType = reflect.TypeOf((*big.Int)(nil))
+
 func newTypeEncoder(t reflect.Type) encoderFunc {
+	if t == bigIntType {
+		return bigIntEncoder
+	}
+
 	switch t.Kind() {
 	case reflect.Bool:
 		return boolEncoder
@@ -158,6 +165,19 @@ func stringEncoder(e *encodeState, v reflect.Value) error {
 
 func bytesEncoder(e *encodeState, v reflect.Value) error {
 	return e.encodeBytes(v.Bytes())
+}
+
+func bigIntEncoder(e *encodeState, v reflect.Value) error {
+	i := v.Interface().(*big.Int)
+	if i.Sign() >= 0 {
+		e.writeByte(0xc2) // tag 2: positive bigint
+		return e.encodeBytes(i.Bytes())
+	} else {
+		e.writeByte(0xc3) // tag 3: negative bigint
+		x := big.NewInt(-1)
+		x.Sub(x, i)
+		return e.encodeBytes(x.Bytes())
+	}
 }
 
 func sliceEncoder(e *encodeState, v reflect.Value) error {
