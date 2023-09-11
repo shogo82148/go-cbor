@@ -6,7 +6,21 @@ import (
 	"math"
 	"math/big"
 	"reflect"
+	"slices"
 	"sync"
+)
+
+type majorType byte
+
+const (
+	majorTypePositiveInt majorType = 0
+	majorTypeNegativeInt majorType = 1
+	majorTypeBytes       majorType = 2
+	majorTypeString      majorType = 3
+	majorTypeArray       majorType = 4
+	majorTypeMap         majorType = 5
+	majorTypeTag         majorType = 6
+	majorTypeOther       majorType = 7
 )
 
 func Marshal(v any) ([]byte, error) {
@@ -139,8 +153,14 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 			return bytesEncoder
 		}
 		return sliceEncoder
+	case reflect.Array:
+		return sliceEncoder
+	case reflect.Map:
+		return mapEncoder
+	case reflect.Interface:
+		return interfaceEncoder
 	}
-	return nil
+	panic("TODO implement")
 }
 
 func boolEncoder(e *encodeState, v reflect.Value) error {
@@ -207,6 +227,46 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 	return nil
 }
 
+type mapKey struct {
+	key     reflect.Value
+	encoded []byte
+}
+
+func cmpMapKey(a, b mapKey) int {
+	return bytes.Compare(a.encoded, b.encoded)
+}
+
+func mapEncoder(s *encodeState, v reflect.Value) error {
+	l := v.Len()
+	keys := make([]mapKey, 0, l)
+	for _, key := range v.MapKeys() {
+		encoded, err := Marshal(key.Interface())
+		if err != nil {
+			return err
+		}
+		keys = append(keys, mapKey{key, encoded})
+	}
+	slices.SortFunc(keys, cmpMapKey)
+
+	// encode the length
+	s.writeUint(majorTypeMap, uint64(l))
+	for _, key := range keys {
+		s.buf.Write(key.encoded)
+		value := v.MapIndex(key.key)
+		if err := s.encodeReflectValue(value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func interfaceEncoder(s *encodeState, v reflect.Value) error {
+	if v.IsNil() {
+		return s.encodeNull()
+	}
+	return s.encodeReflectValue(v.Elem())
+}
+
 func (s *encodeState) writeByte(v byte) {
 	s.buf.WriteByte(v)
 }
@@ -229,66 +289,38 @@ func (s *encodeState) writeUint64(v uint64) {
 	s.buf.Write(buf[:])
 }
 
+func (s *encodeState) writeUint(major majorType, v uint64) {
+	bits := byte(major) << 5
+	switch {
+	case v < 24:
+		s.writeByte(bits | byte(v))
+	case v < 0x100:
+		s.writeByte(bits | 24)
+		s.writeByte(byte(v))
+	case v < 0x10000:
+		s.writeByte(bits | 25)
+		s.writeUint16(uint16(v))
+	case v < 0x100000000:
+		s.writeByte(bits | 26)
+		s.writeUint32(uint32(v))
+	default:
+		s.writeByte(bits | 27)
+		s.writeUint64(uint64(v))
+	}
+}
+
 func (s *encodeState) encodeInt(v int64) error {
 	if v >= 0 {
 		return s.encodeUint(uint64(v))
 	}
 	v = -1 - v
-	switch {
-	case v < 24:
-		// 0x20..0x37: negative integer (-1..-24)
-		s.writeByte(byte(0x20 + v))
-		return nil
-	case v < 0x100:
-		// 0x38: 1 byte negative integer
-		s.writeByte(0x38)
-		s.writeByte(byte(v))
-		return nil
-	case v < 0x10000:
-		// 0x39: 2 byte negative integer
-		s.writeByte(0x39)
-		s.writeUint16(uint16(v))
-		return nil
-	case v < 0x100000000:
-		// 0x3a: 4 byte negative integer
-		s.writeByte(0x3a)
-		s.writeUint32(uint32(v))
-		return nil
-	default:
-		// 0x3b: 8 byte negative integer
-		s.writeByte(0x3b)
-		s.writeUint64(uint64(v))
-		return nil
-	}
+	s.writeUint(majorTypeNegativeInt, uint64(v))
+	return nil
 }
 
 func (s *encodeState) encodeUint(v uint64) error {
-	switch {
-	case v < 24:
-		// 0x00..0x17: positive integer (0..23)
-		s.writeByte(byte(v))
-		return nil
-	case v < 0x100:
-		// 0x18: 1 byte positive integer
-		s.writeByte(0x18)
-		s.writeByte(byte(v))
-		return nil
-	case v < 0x10000:
-		// 0x19: 2 byte positive integer
-		s.writeByte(0x19)
-		s.writeUint16(uint16(v))
-		return nil
-	case v < 0x100000000:
-		// 0x1a: 4 byte positive integer
-		s.writeByte(0x1a)
-		s.writeUint32(uint32(v))
-		return nil
-	default:
-		// 0x1b: 8 byte positive integer
-		s.writeByte(0x1b)
-		s.writeUint64(uint64(v))
-		return nil
-	}
+	s.writeUint(majorTypePositiveInt, uint64(v))
+	return nil
 }
 
 func (s *encodeState) encodeFloat64(v float64) error {
@@ -391,44 +423,14 @@ func (s *encodeState) encodeUndefined() error {
 
 func (s *encodeState) encodeBytes(v []byte) error {
 	l := len(v)
-	switch {
-	case l < 0x17:
-		s.writeByte(byte(0x40 + l))
-	case l < 0x100:
-		s.writeByte(0x58)
-		s.writeByte(byte(l))
-	case l < 0x10000:
-		s.writeByte(0x59)
-		s.writeUint16(uint16(l))
-	case l < 0x100000000:
-		s.writeByte(0x5a)
-		s.writeUint32(uint32(l))
-	default:
-		s.writeByte(0x5b)
-		s.writeUint64(uint64(l))
-	}
+	s.writeUint(majorTypeBytes, uint64(l))
 	s.buf.Write(v)
 	return nil
 }
 
 func (s *encodeState) encodeString(v string) error {
 	l := len(v)
-	switch {
-	case l < 0x17:
-		s.writeByte(byte(0x60 + l))
-	case l < 0x100:
-		s.writeByte(0x78)
-		s.writeByte(byte(l))
-	case l < 0x10000:
-		s.writeByte(0x79)
-		s.writeUint16(uint16(l))
-	case l < 0x100000000:
-		s.writeByte(0x7a)
-		s.writeUint32(uint32(l))
-	default:
-		s.writeByte(0x7b)
-		s.writeUint64(uint64(l))
-	}
+	s.writeUint(majorTypeString, uint64(l))
 	s.buf.WriteString(v)
 	return nil
 }

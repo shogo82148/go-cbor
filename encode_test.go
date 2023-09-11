@@ -278,6 +278,45 @@ func TestMarshal(t *testing.T) {
 				0x17, 0x18, 0x18, 0x18, 0x19,
 			},
 		},
+		{
+			"empty map",
+			map[string]any{},
+			[]byte{0xa0},
+		},
+		{
+			"map",
+			map[int]int{
+				1: 2,
+				3: 4,
+			},
+			[]byte{0xa2, 0x01, 0x02, 0x03, 0x04},
+		},
+		{
+			"map: {\"a\": 1, \"b\": [2, 3]}",
+			map[string]any{
+				"a": 1,
+				"b": []int{2, 3},
+			},
+			[]byte{0xa2, 0x61, 0x61, 0x01, 0x61, 0x62, 0x82, 0x02, 0x03},
+		},
+		{
+			"map abcde",
+			map[string]string{
+				"a": "A",
+				"b": "B",
+				"c": "C",
+				"d": "D",
+				"e": "E",
+			},
+			[]byte{
+				0xa5,
+				0x61, 0x61, 0x61, 0x41,
+				0x61, 0x62, 0x61, 0x42,
+				0x61, 0x63, 0x61, 0x43,
+				0x61, 0x64, 0x61, 0x44,
+				0x61, 0x65, 0x61, 0x45,
+			},
+		},
 
 		// integer types
 		{
@@ -348,6 +387,32 @@ func TestMarshal(t *testing.T) {
 			"custom marshaler",
 			customMarshaler{},
 			[]byte{0x01},
+		},
+
+		// map key sort order
+		{
+			"RFC 8949 Section 4.2.1",
+			map[any]any{
+				10:          1,
+				100:         2,
+				-1:          3,
+				"z":         4,
+				"aa":        5,
+				[1]int{100}: 6,
+				[1]int{-1}:  7,
+				false:       8,
+			},
+			[]byte{
+				0xa8,       // 8 items map
+				0x0a, 0x01, // 10
+				0x18, 0x64, 0x02, // 100
+				0x20, 0x03, // -1
+				0x61, 0x7a, 0x04, // "z"
+				0x62, 0x61, 0x61, 0x05, // "aa"
+				0x81, 0x18, 0x64, 0x06, // [100]
+				0x81, 0x20, 0x07, // [-1]
+				0xf4, 0x08, // false
+			},
 		},
 	}
 	for _, tt := range tests {
