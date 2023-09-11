@@ -153,6 +153,8 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 			return bytesEncoder
 		}
 		return sliceEncoder
+	case reflect.Array:
+		return sliceEncoder
 	case reflect.Map:
 		return mapEncoder
 	case reflect.Interface:

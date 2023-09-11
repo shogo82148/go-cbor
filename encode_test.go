@@ -388,6 +388,32 @@ func TestMarshal(t *testing.T) {
 			customMarshaler{},
 			[]byte{0x01},
 		},
+
+		// map key sort order
+		{
+			"RFC 8949 Section 4.2.1",
+			map[any]any{
+				10:          1,
+				100:         2,
+				-1:          3,
+				"z":         4,
+				"aa":        5,
+				[1]int{100}: 6,
+				[1]int{-1}:  7,
+				false:       8,
+			},
+			[]byte{
+				0xa8,       // 8 items map
+				0x0a, 0x01, // 10
+				0x18, 0x64, 0x02, // 100
+				0x20, 0x03, // -1
+				0x61, 0x7a, 0x04, // "z"
+				0x62, 0x61, 0x61, 0x05, // "aa"
+				0x81, 0x18, 0x64, 0x06, // [100]
+				0x81, 0x20, 0x07, // [-1]
+				0xf4, 0x08, // false
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
