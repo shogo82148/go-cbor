@@ -1,0 +1,348 @@
+package cbor
+
+import (
+	"bytes"
+	"math"
+	"testing"
+)
+
+type customMarshaler struct{}
+
+func (m customMarshaler) MarshalCBOR() ([]byte, error) {
+	return []byte{0x01}, nil
+}
+
+func TestMarshal(t *testing.T) {
+	tests := []struct {
+		name string
+		v    any
+		want []byte
+	}{
+		// RFC 8949  Appendix A. Examples of Encoded CBOR Data Items
+		{
+			"integer zero",
+			int(0),
+			[]byte{0x00},
+		},
+		{
+			"integer one",
+			int(1),
+			[]byte{0x01},
+		},
+		{
+			"integer ten",
+			int(10),
+			[]byte{0x0a},
+		},
+		{
+			"integer twenty-three",
+			int(23),
+			[]byte{0x17},
+		},
+		{
+			"integer twenty-four",
+			int(24),
+			[]byte{0x18, 0x18},
+		},
+		{
+			"integer twenty-five",
+			int(25),
+			[]byte{0x18, 0x19},
+		},
+		{
+			"integer one hundred",
+			int(100),
+			[]byte{0x18, 0x64},
+		},
+		{
+			"integer one thousand",
+			int(1000),
+			[]byte{0x19, 0x03, 0xe8},
+		},
+		{
+			"integer one million",
+			int(1000_000),
+			[]byte{0x1a, 0x00, 0x0f, 0x42, 0x40},
+		},
+		{
+			"1_000_000_000_000",
+			int(1_000_000_000_000),
+			[]byte{0x1b, 0x00, 0x00, 0x00, 0xe8, 0xd4, 0xa5, 0x10, 0x00},
+		},
+		{
+			"maximum 64-bit unsigned integer",
+			uint64(18446744073709551615),
+			[]byte{0x1b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		},
+		// TODO: 18446744073709551616
+		// TODO: -18446744073709551616
+		// TODO: -18446744073709551617
+		{
+			"negative one",
+			int(-1),
+			[]byte{0x20},
+		},
+		{
+			"negative ten",
+			int(-10),
+			[]byte{0x29},
+		},
+		{
+			"negative one hundred",
+			int(-100),
+			[]byte{0x38, 0x63},
+		},
+		{
+			"negative one thousand",
+			int(-1000),
+			[]byte{0x39, 0x03, 0xe7},
+		},
+		{
+			"positive float zero",
+			math.Copysign(0, 1),
+			[]byte{0xf9, 0x00, 0x00},
+		},
+		{
+			"negative float zero",
+			math.Copysign(0, -1),
+			[]byte{0xf9, 0x80, 0x00},
+		},
+		{
+			"positive float one",
+			float64(1),
+			[]byte{0xf9, 0x3c, 0x00},
+		},
+		{
+			"1.1",
+			float64(1.1),
+			[]byte{0xfb, 0x3f, 0xf1, 0x99, 0x99, 0x99, 0x99, 0x99, 0x9a},
+		},
+		{
+			"1.5",
+			float64(1.5),
+			[]byte{0xf9, 0x3e, 0x00},
+		},
+		{
+			"65504.0",
+			float64(65504.0),
+			[]byte{0xf9, 0x7b, 0xff},
+		},
+		{
+			"100000.0",
+			float64(100000.0),
+			[]byte{0xfa, 0x47, 0xc3, 0x50, 0x00},
+		},
+		{
+			"3.4028234663852886e+38",
+			float64(3.4028234663852886e+38),
+			[]byte{0xfa, 0x7f, 0x7f, 0xff, 0xff},
+		},
+		{
+			"1.0e+300",
+			float64(1.0e+300),
+			[]byte{0xfb, 0x7e, 0x37, 0xe4, 0x3c, 0x88, 0x00, 0x75, 0x9c},
+		},
+		{
+			"5.960464477539063e-8",
+			float64(5.960464477539063e-8),
+			[]byte{0xf9, 0x00, 0x01},
+		},
+		{
+			"0.00006103515625",
+			float64(0.00006103515625),
+			[]byte{0xf9, 0x04, 0x00},
+		},
+		{
+			"-4.0",
+			float64(-4.0),
+			[]byte{0xf9, 0xc4, 0x00},
+		},
+		{
+			"-4.1",
+			float64(-4.1),
+			[]byte{0xfb, 0xc0, 0x10, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66},
+		},
+		{
+			"Infinity",
+			math.Inf(1),
+			[]byte{0xf9, 0x7c, 0x00},
+		},
+		{
+			"NaN",
+			math.NaN(),
+			[]byte{0xf9, 0x7e, 0x00},
+		},
+		{
+			"-Infinity",
+			math.Inf(-1),
+			[]byte{0xf9, 0xfc, 0x00},
+		},
+		{
+			"false",
+			false,
+			[]byte{0xf4},
+		},
+		{
+			"true",
+			true,
+			[]byte{0xf5},
+		},
+		{
+			"null",
+			nil,
+			[]byte{0xf6},
+		},
+		{
+			"undefined",
+			Undefined,
+			[]byte{0xf7},
+		},
+		// TODO: simple values
+		{
+			"byte string",
+			[]byte(""),
+			[]byte{0x40},
+		},
+		{
+			"byte string: h'01020304'",
+			[]byte{0x01, 0x02, 0x03, 0x04},
+			[]byte{0x44, 0x01, 0x02, 0x03, 0x04},
+		},
+		{
+			"unicode string",
+			"",
+			[]byte{0x60},
+		},
+		{
+			"unicode string: \"IETF\"",
+			"IETF",
+			[]byte{0x64, 0x49, 0x45, 0x54, 0x46},
+		},
+		{
+			"unicode string: \"\"\"\\\"",
+			"\"\\",
+			[]byte{0x62, 0x22, 0x5c},
+		},
+		{
+			"unicode string: \"\u00fc\"",
+			"\u00fc",
+			[]byte{0x62, 0xc3, 0xbc},
+		},
+		{
+			"unicode string: \"\u6c34\"",
+			"\u6c34",
+			[]byte{0x63, 0xe6, 0xb0, 0xb4},
+		},
+		{
+			"array",
+			[]any{},
+			[]byte{0x80},
+		},
+		{
+			"array: [1, 2, 3]",
+			[]int{1, 2, 3},
+			[]byte{0x83, 0x01, 0x02, 0x03},
+		},
+		{
+			"array: [1, [2, 3], [4, 5]]",
+			[]any{1, []int{2, 3}, []int{4, 5}},
+			[]byte{0x83, 0x01, 0x82, 0x02, 0x03, 0x82, 0x04, 0x05},
+		},
+		{
+			"array that have 25 elements",
+			[]int{
+				1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+				11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+				21, 22, 23, 24, 25,
+			},
+			[]byte{
+				0x98, 0x19, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+				0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+				0x17, 0x18, 0x18, 0x18, 0x19,
+			},
+		},
+
+		// integer types
+		{
+			"int8",
+			int8(0),
+			[]byte{0x00},
+		},
+		{
+			"int16",
+			int16(0),
+			[]byte{0x00},
+		},
+		{
+			"int32",
+			int32(0),
+			[]byte{0x00},
+		},
+		{
+			"int64",
+			int64(0),
+			[]byte{0x00},
+		},
+		{
+			"uint8",
+			uint8(0),
+			[]byte{0x00},
+		},
+		{
+			"uint16",
+			uint16(0),
+			[]byte{0x00},
+		},
+		{
+			"uint32",
+			uint32(0),
+			[]byte{0x00},
+		},
+		{
+			"uint64",
+			uint64(0),
+			[]byte{0x00},
+		},
+		{
+			"uintptr",
+			uintptr(0),
+			[]byte{0x00},
+		},
+		{
+			"int",
+			int(0),
+			[]byte{0x00},
+		},
+		{
+			"uint",
+			uint(0),
+			[]byte{0x00},
+		},
+
+		// float
+		{
+			"float32",
+			float32(0),
+			[]byte{0xf9, 0x00, 0x00},
+		},
+
+		// marshaler
+		{
+			"custom marshaler",
+			customMarshaler{},
+			[]byte{0x01},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Marshal(tt.v)
+			if err != nil {
+				t.Errorf("Marshal() error = %v", err)
+				return
+			}
+			if !bytes.Equal(got, tt.want) {
+				t.Errorf("Marshal() got = %x, want %x", got, tt.want)
+			}
+		})
+	}
+}

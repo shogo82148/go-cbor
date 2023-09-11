@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+//go:generate sh -c "perl scripts/float_gen.pl | gofmt > float_gen_test.go"
+
 func TestFloat(t *testing.T) {
 	tests := []struct {
 		f64   float64
@@ -47,7 +49,12 @@ func TestFloat(t *testing.T) {
 		{0x1.fffffep+127, []byte{0x7f, 0x7f, 0xff, 0xff}}, // largest normal float32
 	}
 	for _, tt := range tests {
-		got := EncodeFloat64(tt.f64)
+		got, err := Marshal(tt.f64)
+		if err != nil {
+			t.Errorf("Marshal() error = %v", err)
+			continue
+		}
+		got = got[1:] // skip major type
 		if !bytes.Equal(got, tt.bytes) {
 			t.Errorf("EncodeFloat64(%x) = %x, want %x", tt.f64, got, tt.bytes)
 		}
@@ -57,7 +64,12 @@ func TestFloat(t *testing.T) {
 func TestFloat_Gen(t *testing.T) {
 	for _, tt := range f64ToBytesTests {
 		input := math.Float64frombits(tt.f64)
-		got := EncodeFloat64(input)
+		got, err := Marshal(input)
+		if err != nil {
+			t.Errorf("Marshal() error = %v", err)
+			continue
+		}
+		got = got[1:] // skip major type
 		if !bytes.Equal(got, tt.bytes) {
 			t.Errorf("EncodeFloat64(%x) = %x, want %x", input, got, tt.bytes)
 		}
