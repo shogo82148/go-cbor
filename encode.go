@@ -310,11 +310,10 @@ func (s *encodeState) writeUint(major majorType, v uint64) {
 }
 
 func (s *encodeState) encodeInt(v int64) error {
-	if v >= 0 {
-		return s.encodeUint(uint64(v))
-	}
-	v = -1 - v
-	s.writeUint(majorTypeNegativeInt, uint64(v))
+	ui := uint64(v >> 63)
+	typ := majorType(ui) & majorTypeNegativeInt
+	ui ^= uint64(v)
+	s.writeUint(typ, ui)
 	return nil
 }
 
