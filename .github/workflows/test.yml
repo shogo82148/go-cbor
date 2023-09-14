@@ -19,7 +19,7 @@ jobs:
       - run: |
           go test -coverprofile="coverage.txt" -v ./...
       - name: upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage.txt
           flags: ${{ matrix.go }}
