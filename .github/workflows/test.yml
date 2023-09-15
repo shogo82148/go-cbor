@@ -12,14 +12,14 @@ jobs:
           - "1.21"
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go }}
       - run: |
           go test -coverprofile="coverage.txt" -v ./...
       - name: upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage.txt
           flags: ${{ matrix.go }}
