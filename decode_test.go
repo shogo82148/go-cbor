@@ -1,6 +1,7 @@
 package cbor
 
 import (
+	"math"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -111,6 +112,121 @@ func TestUnmarshal(t *testing.T) {
 			new(int64),
 			ptr(int64(-1000)),
 		},
+		{
+			"positive float zero",
+			[]byte{0xf9, 0x00, 0x00},
+			new(float64),
+			ptr(float64(0)),
+		},
+		{
+			"negative float zero",
+			[]byte{0xf9, 0x80, 0x00},
+			new(float64),
+			ptr(float64(0)),
+		},
+		{
+			"positive float one",
+			[]byte{0xf9, 0x3c, 0x00},
+			new(float64),
+			ptr(float64(1)),
+		},
+		{
+			"1.1",
+			[]byte{0xfb, 0x3f, 0xf1, 0x99, 0x99, 0x99, 0x99, 0x99, 0x9a},
+			new(float64),
+			ptr(float64(1.1)),
+		},
+		{
+			"1.5",
+			[]byte{0xf9, 0x3e, 0x00},
+			new(float64),
+			ptr(float64(1.5)),
+		},
+		{
+			"65504.0",
+			[]byte{0xf9, 0x7b, 0xff},
+			new(float64),
+			ptr(float64(65504.0)),
+		},
+		{
+			"100000.0",
+			[]byte{0xfa, 0x47, 0xc3, 0x50, 0x00},
+			new(float64),
+			ptr(float64(100000.0)),
+		},
+		{
+			"3.4028234663852886e+38",
+			[]byte{0xfa, 0x7f, 0x7f, 0xff, 0xff},
+			new(float64),
+			ptr(float64(3.4028234663852886e+38)),
+		},
+		{
+			"1.0e+300",
+			[]byte{0xfb, 0x7e, 0x37, 0xe4, 0x3c, 0x88, 0x00, 0x75, 0x9c},
+			new(float64),
+			ptr(float64(1.0e+300)),
+		},
+		{
+			"5.960464477539063e-8",
+			[]byte{0xf9, 0x00, 0x01},
+			new(float64),
+			ptr(float64(5.960464477539063e-8)),
+		},
+		{
+			"0.00006103515625",
+			[]byte{0xf9, 0x04, 0x00},
+			new(float64),
+			ptr(float64(0.00006103515625)),
+		},
+		{
+			"-4.0",
+			[]byte{0xf9, 0xc4, 0x00},
+			new(float64),
+			ptr(float64(-4.0)),
+		},
+		{
+			"-4.1",
+			[]byte{0xfb, 0xc0, 0x10, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66},
+			new(float64),
+			ptr(float64(-4.1)),
+		},
+		{
+			"float16 Infinity",
+			[]byte{0xf9, 0x7c, 0x00},
+			new(float64),
+			ptr(math.Inf(1)),
+		},
+		// skip NaNs. cmp.Diff can't compare NaNs.
+		{
+			"float16 -Infinity",
+			[]byte{0xf9, 0xfc, 0x00},
+			new(float64),
+			ptr(math.Inf(-1)),
+		},
+		{
+			"float32 Infinity",
+			[]byte{0xfa, 0x7f, 0x80, 0x00, 0x00},
+			new(float64),
+			ptr(math.Inf(1)),
+		},
+		{
+			"float32 -Infinity",
+			[]byte{0xfa, 0xff, 0x80, 0x00, 0x00},
+			new(float64),
+			ptr(math.Inf(-1)),
+		},
+		{
+			"float64 Infinity",
+			[]byte{0xfb, 0x7f, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+			new(float64),
+			ptr(math.Inf(1)),
+		},
+		{
+			"float64 -Infinity",
+			[]byte{0xfb, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+			new(float64),
+			ptr(math.Inf(-1)),
+		},
 	}
 
 	for _, tt := range tests {
@@ -123,4 +239,34 @@ func TestUnmarshal(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnmarshal_NaN(t *testing.T) {
+	t.Run("float16 NaN", func(t *testing.T) {
+		var f float64
+		if err := Unmarshal([]byte{0xf9, 0x7e, 0x00}, &f); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		if !math.IsNaN(f) {
+			t.Errorf("Unmarshal() got = %v, want NaN", f)
+		}
+	})
+	t.Run("float32 NaN", func(t *testing.T) {
+		var f float64
+		if err := Unmarshal([]byte{0xfa, 0x7f, 0xc0, 0x00, 0x00}, &f); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		if !math.IsNaN(f) {
+			t.Errorf("Unmarshal() got = %v, want NaN", f)
+		}
+	})
+	t.Run("float64 NaN", func(t *testing.T) {
+		var f float64
+		if err := Unmarshal([]byte{0xfb, 0x7f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, &f); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		if !math.IsNaN(f) {
+			t.Errorf("Unmarshal() got = %v, want NaN", f)
+		}
+	})
 }
