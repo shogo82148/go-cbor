@@ -326,7 +326,7 @@ func TestUnmarshal_Error(t *testing.T) {
 			"int64 positive overflow(any)",
 			[]byte{0x1b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +2^63
 			new(any),
-			&UnmarshalTypeError{Value: "integer", Type: typeOf[int64](), Offset: 0},
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[any](), Offset: 0},
 		},
 		{
 			"converting positive integer to float",
@@ -365,6 +365,14 @@ func TestUnmarshal_Error(t *testing.T) {
 			[]byte{0x20},
 			new(someInterface),
 			&UnmarshalTypeError{Value: "integer", Type: typeOf[someInterface](), Offset: 0},
+		},
+
+		// floats
+		{
+			"float32 overflow",
+			[]byte{0xfb, 0x7f, 0xef, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, // 1.7976931348623157e+308
+			new(float32),
+			&UnmarshalTypeError{Value: "float", Type: typeOf[float32](), Offset: 0},
 		},
 	}
 

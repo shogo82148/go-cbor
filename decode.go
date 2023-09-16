@@ -309,7 +309,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if u != nil {
 			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
-		return d.decodeFloat16(uint16(w), v)
+		return d.decodeFloat16(start, uint16(w), v)
 
 	// single-precision float (four-byte IEEE 754)
 	case 0xfa:
@@ -320,7 +320,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if u != nil {
 			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
-		return d.decodeFloat32(uint32(w), v)
+		return d.decodeFloat32(start, uint32(w), v)
 
 	// double-precision float (eight-byte IEEE 754)
 	case 0xfb:
@@ -331,7 +331,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if u != nil {
 			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
-		return d.decodeFloat64(uint64(w), v)
+		return d.decodeFloat64(start, uint64(w), v)
 	}
 	return nil
 }
@@ -384,7 +384,7 @@ func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) er
 	return nil
 }
 
-func (d *decodeState) decodeFloat16(w uint16, v reflect.Value) error {
+func (d *decodeState) decodeFloat16(start int, w uint16, v reflect.Value) error {
 	sign := uint64(w&0x8000) << (64 - 16)
 	exp := uint64(w>>10) & 0x1f
 	frac := uint64(w & 0x03ff)
@@ -413,31 +413,35 @@ func (d *decodeState) decodeFloat16(w uint16, v reflect.Value) error {
 		frac <<= 52 - 10
 	}
 	f := math.Float64frombits(sign | exp<<52 | uint64(frac))
-	return d.decodeFloat(f, v)
+	return d.decodeFloat(start, f, v)
 }
 
-func (d *decodeState) decodeFloat32(w uint32, v reflect.Value) error {
+func (d *decodeState) decodeFloat32(start int, w uint32, v reflect.Value) error {
 	f := math.Float32frombits(w)
-	return d.decodeFloat(float64(f), v)
+	return d.decodeFloat(start, float64(f), v)
 }
 
-func (d *decodeState) decodeFloat64(w uint64, v reflect.Value) error {
+func (d *decodeState) decodeFloat64(start int, w uint64, v reflect.Value) error {
 	f := math.Float64frombits(w)
-	return d.decodeFloat(f, v)
+	return d.decodeFloat(start, f, v)
 }
 
-func (d *decodeState) decodeFloat(f float64, v reflect.Value) error {
+func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
 	_, v = indirect(v, false)
 	switch v.Kind() {
 	case reflect.Float32, reflect.Float64:
 		if v.OverflowFloat(f) {
-			return errors.New("cbor: err") // TODO: introduce InvalidUnmarshalError
+			d.saveError(&UnmarshalTypeError{Value: "float", Type: v.Type(), Offset: int64(start)})
 		}
 		v.SetFloat(f)
 	case reflect.Interface:
-		if v.NumMethod() == 0 {
-			v.Set(reflect.ValueOf(f))
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
+			break
 		}
+		v.Set(reflect.ValueOf(f))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 	}
 	return nil
 }
