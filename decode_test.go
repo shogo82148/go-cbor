@@ -266,6 +266,14 @@ func TestUnmarshal(t *testing.T) {
 			new(any),
 			ptr(any(float64(0))),
 		},
+
+		// Unmarshaler
+		{
+			"Unmarshaler",
+			[]byte{0x00},
+			new(RawMessage),
+			&RawMessage{0x00},
+		},
 	}
 
 	for _, tt := range tests {
