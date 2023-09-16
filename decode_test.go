@@ -300,10 +300,40 @@ func TestUnmarshal_Error(t *testing.T) {
 		err  *UnmarshalTypeError
 	}{
 		{
-			"integer overflow",
-			[]byte{0x18, 0x80},
+			"int8 positive overflow",
+			[]byte{0x18, 0x80}, // +128
 			new(int8),
 			&UnmarshalTypeError{Value: "integer", Type: typeOf[int8](), Offset: 0},
+		},
+		{
+			"uint8 positive overflow",
+			[]byte{0x19, 0x01, 0x00}, // +256
+			new(uint8),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[uint8](), Offset: 0},
+		},
+		{
+			"int64 positive overflow",
+			[]byte{0x1b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +2^63
+			new(uint8),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[uint8](), Offset: 0},
+		},
+		{
+			"converting integer to float",
+			[]byte{0x00},
+			new(float64),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[float64](), Offset: 0},
+		},
+		{
+			"int8 negative overflow",
+			[]byte{0x38, 0x80}, // -129
+			new(int8),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[int8](), Offset: 0},
+		},
+		{
+			"int64 negative overflow",
+			[]byte{0x2b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +-2^63-1
+			new(uint8),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[uint8](), Offset: 0},
 		},
 	}
 
@@ -313,6 +343,7 @@ func TestUnmarshal_Error(t *testing.T) {
 			e, ok := err.(*UnmarshalTypeError)
 			if !ok {
 				t.Errorf("Unmarshal() error = %v, want *UnmarshalTypeError", err)
+				return
 			}
 			if e.Value != tt.err.Value {
 				t.Errorf("unexpected Value: got %v, want %v", e.Value, tt.err.Value)

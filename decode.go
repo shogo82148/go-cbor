@@ -254,7 +254,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if u != nil {
 			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
-		return d.decodeNegativeInt(uint64(typ-0x20), v)
+		return d.decodeNegativeInt(start, uint64(typ-0x20), v)
 
 	// negative integer -1-n (one-byte uint8_t for n follows)
 	case 0x38:
@@ -265,7 +265,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if u != nil {
 			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
-		return d.decodeNegativeInt(uint64(w), v)
+		return d.decodeNegativeInt(start, uint64(w), v)
 
 	// negative integer -1-n (two-byte uint16_t for n follows)
 	case 0x39:
@@ -276,7 +276,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if u != nil {
 			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
-		return d.decodeNegativeInt(uint64(w), v)
+		return d.decodeNegativeInt(start, uint64(w), v)
 
 	// negative integer -1-n (four-byte uint32_t for n follows)
 	case 0x3a:
@@ -287,7 +287,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if u != nil {
 			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
-		return d.decodeNegativeInt(uint64(w), v)
+		return d.decodeNegativeInt(start, uint64(w), v)
 
 	// negative integer -1-n (eight-byte uint64_t for n follows)
 	case 0x3b:
@@ -298,7 +298,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if u != nil {
 			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
-		return d.decodeNegativeInt(w, v)
+		return d.decodeNegativeInt(start, w, v)
 
 	// half-precision float (two-byte IEEE 754)
 	case 0xf9:
@@ -362,13 +362,13 @@ func (d *decodeState) decodePositiveInt(start int, w uint64, v reflect.Value) er
 	return nil
 }
 
-func (d *decodeState) decodeNegativeInt(w uint64, v reflect.Value) error {
+func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) error {
 	_, v = indirect(v, false)
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i := int64(^w)
 		if i >= 0 || v.OverflowInt(i) {
-			return errors.New("cbor: err") // TODO: introduce InvalidUnmarshalError
+			d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 		}
 		v.SetInt(i)
 	case reflect.Interface:
@@ -376,6 +376,8 @@ func (d *decodeState) decodeNegativeInt(w uint64, v reflect.Value) error {
 			i := int64(^w)
 			v.Set(reflect.ValueOf(int64(i)))
 		}
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 	}
 	return nil
 }
