@@ -2,6 +2,7 @@ package cbor
 
 import (
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -10,6 +11,10 @@ import (
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+type someInterface interface {
+	SomeMethod()
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -265,6 +270,14 @@ func TestUnmarshal(t *testing.T) {
 			new(any),
 			ptr(any(float64(0))),
 		},
+
+		// Unmarshaler
+		{
+			"Unmarshaler",
+			[]byte{0x00},
+			new(RawMessage),
+			&RawMessage{0x00},
+		},
 	}
 
 	for _, tt := range tests {
@@ -274,6 +287,117 @@ func TestUnmarshal(t *testing.T) {
 			}
 			if diff := cmp.Diff(tt.ptr, tt.want, cmpopts.EquateNaNs()); diff != "" {
 				t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func typeOf[T any]() reflect.Type {
+	return reflect.TypeOf((*T)(nil)).Elem()
+}
+
+func TestUnmarshal_Error(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		ptr  any
+		err  *UnmarshalTypeError
+	}{
+		// positive integers
+		{
+			"int8 positive overflow",
+			[]byte{0x18, 0x80}, // +128
+			new(int8),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[int8](), Offset: 0},
+		},
+		{
+			"uint8 positive overflow",
+			[]byte{0x19, 0x01, 0x00}, // +256
+			new(uint8),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[uint8](), Offset: 0},
+		},
+		{
+			"int64 positive overflow",
+			[]byte{0x1b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +2^63
+			new(int64),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[int64](), Offset: 0},
+		},
+		{
+			"int64 positive overflow(any)",
+			[]byte{0x1b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +2^63
+			new(any),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[any](), Offset: 0},
+		},
+		{
+			"converting positive integer to float",
+			[]byte{0x00},
+			new(float64),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[float64](), Offset: 0},
+		},
+		{
+			"converting positive integer to some interface",
+			[]byte{0x00},
+			new(someInterface),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[someInterface](), Offset: 0},
+		},
+
+		// negative integers
+		{
+			"int8 negative overflow",
+			[]byte{0x38, 0x80}, // -129
+			new(int8),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[int8](), Offset: 0},
+		},
+		{
+			"int64 negative overflow",
+			[]byte{0x2b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +-2^63-1
+			new(uint8),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[uint8](), Offset: 0},
+		},
+		{
+			"converting negative integer to float",
+			[]byte{0x20},
+			new(float64),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[float64](), Offset: 0},
+		},
+		{
+			"converting negative integer to some interface",
+			[]byte{0x20},
+			new(someInterface),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[someInterface](), Offset: 0},
+		},
+
+		// floats
+		{
+			"float32 overflow",
+			[]byte{0xfb, 0x7f, 0xef, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, // 1.7976931348623157e+308
+			new(float32),
+			&UnmarshalTypeError{Value: "float", Type: typeOf[float32](), Offset: 0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Unmarshal(tt.data, tt.ptr)
+			e, ok := err.(*UnmarshalTypeError)
+			if !ok {
+				t.Errorf("Unmarshal() error = %v, want *UnmarshalTypeError", err)
+				return
+			}
+			if e.Value != tt.err.Value {
+				t.Errorf("unexpected Value: got %v, want %v", e.Value, tt.err.Value)
+			}
+			if e.Type != tt.err.Type {
+				t.Errorf("unexpected Type: got %v, want %v", e.Type, tt.err.Type)
+			}
+			if e.Offset != tt.err.Offset {
+				t.Errorf("unexpected Offset: got %v, want %v", e.Offset, tt.err.Offset)
+			}
+			if e.Struct != tt.err.Struct {
+				t.Errorf("unexpected Struct: got %v, want %v", e.Struct, tt.err.Struct)
+			}
+			if e.Field != tt.err.Field {
+				t.Errorf("unexpected Field: got %v, want %v", e.Field, tt.err.Field)
 			}
 		})
 	}

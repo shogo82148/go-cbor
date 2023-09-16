@@ -7,12 +7,6 @@ import (
 	"testing"
 )
 
-type customMarshaler struct{}
-
-func (m customMarshaler) MarshalCBOR() ([]byte, error) {
-	return []byte{0x01}, nil
-}
-
 func newBigInt(s string) *big.Int {
 	i := new(big.Int)
 	if _, ok := i.SetString(s, 0); !ok {
@@ -384,8 +378,8 @@ func TestMarshal(t *testing.T) {
 
 		// marshaler
 		{
-			"custom marshaler",
-			customMarshaler{},
+			"marshaler",
+			RawMessage{0x01},
 			[]byte{0x01},
 		},
 
