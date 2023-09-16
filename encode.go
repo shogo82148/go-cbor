@@ -10,6 +10,11 @@ import (
 	"sync"
 )
 
+type CBORMarshaler interface {
+	// MarshalCBOR returns the CBOR encoding of the receiver.
+	MarshalCBOR() ([]byte, error)
+}
+
 type majorType byte
 
 const (

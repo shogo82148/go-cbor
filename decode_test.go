@@ -245,6 +245,26 @@ func TestUnmarshal(t *testing.T) {
 			new(float64),
 			ptr(math.Inf(-1)),
 		},
+
+		// decode to any
+		{
+			"decode unsigned int to any",
+			[]byte{0x00},
+			new(any),
+			ptr(any(int64(0))),
+		},
+		{
+			"decode signed int to any",
+			[]byte{0x20},
+			new(any),
+			ptr(any(int64(-1))),
+		},
+		{
+			"decode float to any",
+			[]byte{0xf9, 0x00, 0x00},
+			new(any),
+			ptr(any(float64(0))),
+		},
 	}
 
 	for _, tt := range tests {
