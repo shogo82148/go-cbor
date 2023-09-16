@@ -2,6 +2,7 @@ package cbor
 
 import (
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -274,6 +275,51 @@ func TestUnmarshal(t *testing.T) {
 			}
 			if diff := cmp.Diff(tt.ptr, tt.want, cmpopts.EquateNaNs()); diff != "" {
 				t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func typeOf[T any]() reflect.Type {
+	return reflect.TypeOf((*T)(nil)).Elem()
+}
+
+func TestUnmarshal_Error(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		ptr  any
+		err  *UnmarshalTypeError
+	}{
+		{
+			"integer overflow",
+			[]byte{0x18, 0x80},
+			new(int8),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[int8](), Offset: 0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Unmarshal(tt.data, tt.ptr)
+			e, ok := err.(*UnmarshalTypeError)
+			if !ok {
+				t.Errorf("Unmarshal() error = %v, want *UnmarshalTypeError", err)
+			}
+			if e.Value != tt.err.Value {
+				t.Errorf("unexpected Value: got %v, want %v", e.Value, tt.err.Value)
+			}
+			if e.Type != tt.err.Type {
+				t.Errorf("unexpected Type: got %v, want %v", e.Type, tt.err.Type)
+			}
+			if e.Offset != tt.err.Offset {
+				t.Errorf("unexpected Offset: got %v, want %v", e.Offset, tt.err.Offset)
+			}
+			if e.Struct != tt.err.Struct {
+				t.Errorf("unexpected Struct: got %v, want %v", e.Struct, tt.err.Struct)
+			}
+			if e.Field != tt.err.Field {
+				t.Errorf("unexpected Field: got %v, want %v", e.Field, tt.err.Field)
 			}
 		})
 	}
