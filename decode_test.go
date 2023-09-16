@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func ptr[T any](v T) *T {
@@ -196,7 +197,12 @@ func TestUnmarshal(t *testing.T) {
 			new(float64),
 			ptr(math.Inf(1)),
 		},
-		// skip NaNs. cmp.Diff can't compare NaNs.
+		{
+			"float16 NaN",
+			[]byte{0xf9, 0x7e, 0x00},
+			new(float64),
+			ptr(math.NaN()),
+		},
 		{
 			"float16 -Infinity",
 			[]byte{0xf9, 0xfc, 0x00},
@@ -208,6 +214,12 @@ func TestUnmarshal(t *testing.T) {
 			[]byte{0xfa, 0x7f, 0x80, 0x00, 0x00},
 			new(float64),
 			ptr(math.Inf(1)),
+		},
+		{
+			"float32 NaN",
+			[]byte{0xfa, 0x7f, 0xc0, 0x00, 0x00},
+			new(float64),
+			ptr(math.NaN()),
 		},
 		{
 			"float32 -Infinity",
@@ -222,6 +234,12 @@ func TestUnmarshal(t *testing.T) {
 			ptr(math.Inf(1)),
 		},
 		{
+			"float64 NaN",
+			[]byte{0xfb, 0x7f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+			new(float64),
+			ptr(math.NaN()),
+		},
+		{
 			"float64 -Infinity",
 			[]byte{0xfb, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 			new(float64),
@@ -234,41 +252,11 @@ func TestUnmarshal(t *testing.T) {
 			if err := Unmarshal(tt.data, tt.ptr); err != nil {
 				t.Errorf("Unmarshal() error = %v", err)
 			}
-			if diff := cmp.Diff(tt.ptr, tt.want); diff != "" {
+			if diff := cmp.Diff(tt.ptr, tt.want, cmpopts.EquateNaNs()); diff != "" {
 				t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
-}
-
-func TestUnmarshal_NaN(t *testing.T) {
-	t.Run("float16 NaN", func(t *testing.T) {
-		var f float64
-		if err := Unmarshal([]byte{0xf9, 0x7e, 0x00}, &f); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		if !math.IsNaN(f) {
-			t.Errorf("Unmarshal() got = %v, want NaN", f)
-		}
-	})
-	t.Run("float32 NaN", func(t *testing.T) {
-		var f float64
-		if err := Unmarshal([]byte{0xfa, 0x7f, 0xc0, 0x00, 0x00}, &f); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		if !math.IsNaN(f) {
-			t.Errorf("Unmarshal() got = %v, want NaN", f)
-		}
-	})
-	t.Run("float64 NaN", func(t *testing.T) {
-		var f float64
-		if err := Unmarshal([]byte{0xfb, 0x7f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, &f); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		if !math.IsNaN(f) {
-			t.Errorf("Unmarshal() got = %v, want NaN", f)
-		}
-	})
 }
 
 func FuzzUnmarshal(f *testing.F) {
@@ -348,7 +336,7 @@ func FuzzUnmarshal(f *testing.F) {
 		if err := Unmarshal(b, &w); err != nil {
 			t.Error(err)
 		}
-		if diff := cmp.Diff(v, w); diff != "" {
+		if diff := cmp.Diff(v, w, cmpopts.EquateNaNs()); diff != "" {
 			t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
 		}
 
@@ -356,7 +344,7 @@ func FuzzUnmarshal(f *testing.F) {
 		if err != nil {
 			t.Error(err)
 		}
-		if diff := cmp.Diff(b, c); diff != "" {
+		if diff := cmp.Diff(b, c, cmpopts.EquateNaNs()); diff != "" {
 			t.Errorf("Marshal() mismatch (-want +got):\n%s", diff)
 		}
 	})
