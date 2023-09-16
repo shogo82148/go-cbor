@@ -13,6 +13,10 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
+type someInterface interface {
+	SomeMethod()
+}
+
 func TestUnmarshal(t *testing.T) {
 	tests := []struct {
 		name string
@@ -299,6 +303,7 @@ func TestUnmarshal_Error(t *testing.T) {
 		ptr  any
 		err  *UnmarshalTypeError
 	}{
+		// positive integers
 		{
 			"int8 positive overflow",
 			[]byte{0x18, 0x80}, // +128
@@ -314,15 +319,29 @@ func TestUnmarshal_Error(t *testing.T) {
 		{
 			"int64 positive overflow",
 			[]byte{0x1b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +2^63
-			new(uint8),
-			&UnmarshalTypeError{Value: "integer", Type: typeOf[uint8](), Offset: 0},
+			new(int64),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[int64](), Offset: 0},
 		},
 		{
-			"converting integer to float",
+			"int64 positive overflow(any)",
+			[]byte{0x1b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +2^63
+			new(any),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[int64](), Offset: 0},
+		},
+		{
+			"converting positive integer to float",
 			[]byte{0x00},
 			new(float64),
 			&UnmarshalTypeError{Value: "integer", Type: typeOf[float64](), Offset: 0},
 		},
+		{
+			"converting positive integer to some interface",
+			[]byte{0x00},
+			new(someInterface),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[someInterface](), Offset: 0},
+		},
+
+		// negative integers
 		{
 			"int8 negative overflow",
 			[]byte{0x38, 0x80}, // -129
@@ -334,6 +353,18 @@ func TestUnmarshal_Error(t *testing.T) {
 			[]byte{0x2b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +-2^63-1
 			new(uint8),
 			&UnmarshalTypeError{Value: "integer", Type: typeOf[uint8](), Offset: 0},
+		},
+		{
+			"converting negative integer to float",
+			[]byte{0x20},
+			new(float64),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[float64](), Offset: 0},
+		},
+		{
+			"converting negative integer to some interface",
+			[]byte{0x20},
+			new(someInterface),
+			&UnmarshalTypeError{Value: "integer", Type: typeOf[someInterface](), Offset: 0},
 		},
 	}
 
