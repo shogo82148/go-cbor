@@ -377,7 +377,7 @@ func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) er
 			d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 			break
 		}
-		v.Set(reflect.ValueOf(int64(w)))
+		v.Set(reflect.ValueOf(i))
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 	}
