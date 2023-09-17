@@ -307,19 +307,18 @@ var unmarshalTests = []struct {
 		new(any),
 		ptr(any(Undefined)),
 	},
-	// TODO:
-	// {
-	// 	"simple(16)",
-	// 	[]byte{0xf0},
-	// 	new(any),
-	// 	ptr(any(16)),
-	// },
-	// {
-	// 	"simple(255)",
-	// 	[]byte{0xf8, 0xff},
-	// 	new(any),
-	// 	ptr(any(255)),
-	// },
+	{
+		"simple(16)",
+		[]byte{0xf0},
+		new(Simple),
+		ptr(Simple(16)),
+	},
+	{
+		"simple(255)",
+		[]byte{0xf8, 0xff},
+		new(Simple),
+		ptr(Simple(255)),
+	},
 	{
 		"zero-length byte string",
 		[]byte{0x40},
@@ -536,6 +535,18 @@ var unmarshalTests = []struct {
 		[]byte{0x64, 0x49, 0x45, 0x54, 0x46},
 		new(any),
 		ptr(any("IETF")),
+	},
+	{
+		"simple(16)",
+		[]byte{0xf0},
+		new(any),
+		ptr(any(Simple(16))),
+	},
+	{
+		"simple(255)",
+		[]byte{0xf8, 0xff},
+		new(any),
+		ptr(any(Simple(255))),
 	},
 
 	// Unmarshaler

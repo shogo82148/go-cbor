@@ -3,6 +3,7 @@ package cbor
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"math"
 	"math/big"
 	"reflect"
@@ -48,6 +49,8 @@ type encodeState struct {
 func (s *encodeState) encode(v any) error {
 	// fast path for basic types
 	switch v := v.(type) {
+	case Simple:
+		return s.encodeSimple(v)
 	case int8:
 		return s.encodeInt(int64(v))
 	case int16:
@@ -422,6 +425,19 @@ func (s *encodeState) encodeNull() error {
 
 func (s *encodeState) encodeUndefined() error {
 	s.writeByte(0xf7) // undefined
+	return nil
+}
+
+func (s *encodeState) encodeSimple(v Simple) error {
+	switch {
+	case v < 24:
+		s.writeByte(0xe0 | byte(v))
+	case v < 32:
+		return errors.New("cbor: reserved simple value")
+	default:
+		s.writeByte(0xf8) // simple value
+		s.writeByte(byte(v))
+	}
 	return nil
 }
 
