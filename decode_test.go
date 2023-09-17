@@ -295,19 +295,19 @@ var unmarshalTests = []struct {
 		new(bool),
 		ptr(true),
 	},
+	{
+		"null",
+		[]byte{0xf6},
+		new(*int64),
+		ptr((*int64)(nil)),
+	},
+	{
+		"undefined",
+		[]byte{0xf7},
+		new(any),
+		ptr(any(Undefined)),
+	},
 	// TODO:
-	// {
-	// 	"null",
-	// 	[]byte{0xf6},
-	// 	new(*int64),
-	// 	ptr((*int64)(nil)),
-	// },
-	// {
-	// 	"undefined",
-	// 	[]byte{0xf7},
-	// 	new(any),
-	// 	ptr(any(Undefined)),
-	// },
 	// {
 	// 	"simple(16)",
 	// 	[]byte{0xf0},

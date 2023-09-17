@@ -570,6 +570,20 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.setBool(start, true, v)
 
+	// null
+	case 0xf6:
+		if u != nil {
+			return u.UnmarshalCBOR(d.data[start:d.off])
+		}
+		return d.setNull(start, v)
+
+	// undefined
+	case 0xf7:
+		if u != nil {
+			return u.UnmarshalCBOR(d.data[start:d.off])
+		}
+		return d.setUndefined(start, v)
+
 	// half-precision float (two-byte IEEE 754)
 	case 0xf9:
 		w, err := d.readUint16()
@@ -1088,6 +1102,28 @@ func (d *decodeState) setBool(start int, b bool, v reflect.Value) error {
 		v.Set(reflect.ValueOf(b))
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "bool", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
+}
+
+func (d *decodeState) setNull(start int, v reflect.Value) error {
+	switch v.Kind() {
+	case reflect.Interface, reflect.Ptr, reflect.Map, reflect.Slice:
+		v.Set(reflect.Zero(v.Type()))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "null", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
+}
+
+func (d *decodeState) setUndefined(start int, v reflect.Value) error {
+	switch v.Kind() {
+	case reflect.Interface:
+		v.Set(reflect.ValueOf(Undefined))
+	case reflect.Ptr, reflect.Map, reflect.Slice:
+		v.Set(reflect.Zero(v.Type()))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "undefined", Type: v.Type(), Offset: int64(start)})
 	}
 	return nil
 }
