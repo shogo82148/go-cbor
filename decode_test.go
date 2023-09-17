@@ -261,6 +261,12 @@ var unmarshalTests = []struct {
 		new([]byte),
 		ptr([]byte{0x01, 0x02, 0x03, 0x04}),
 	},
+	{
+		"indefinite-length byte string",
+		[]byte{0x5f, 0x42, 0x01, 0x02, 0x43, 0x03, 0x4, 0x05, 0xff},
+		new([]byte),
+		ptr([]byte{0x01, 0x02, 0x03, 0x04, 0x05}),
+	},
 
 	// decode to any
 	{
@@ -535,6 +541,14 @@ var notWellFormed = [][]byte{
 	{0x1f},
 	{0x3f},
 	{0xdf},
+}
+
+func TestValid_valid(t *testing.T) {
+	for _, tt := range unmarshalTests {
+		if !Valid(tt.data) {
+			t.Errorf("Valid(%x) = false, want true", tt.data)
+		}
+	}
 }
 
 func TestValid_invalid(t *testing.T) {
