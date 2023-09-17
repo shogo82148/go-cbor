@@ -53,6 +53,15 @@ func (e *InvalidUnmarshalError) Error() string {
 // Unmarshal parses the CBOR-encoded data and stores the result in the value pointed to by v.
 func Unmarshal(data []byte, v any) error {
 	d := newDecodeState(data)
+
+	// Check for well-formedness.
+	// Avoids filling out half a data structure
+	// before discovering a JSON syntax error.
+	if d.checkValid() != nil {
+		return d.err
+	}
+
+	d.init(data)
 	if err := d.decode(v); err != nil {
 		return err
 	}
@@ -63,13 +72,21 @@ func Unmarshal(data []byte, v any) error {
 }
 
 func newDecodeState(data []byte) *decodeState {
-	return &decodeState{data: data}
+	d := new(decodeState)
+	d.init(data)
+	return d
 }
 
 type decodeState struct {
 	data []byte
 	off  int // next read offset
 	err  error
+}
+
+func (d *decodeState) init(data []byte) {
+	d.data = data
+	d.off = 0
+	d.err = nil
 }
 
 func (s *decodeState) readByte() (byte, error) {
@@ -79,6 +96,13 @@ func (s *decodeState) readByte() (byte, error) {
 	b := s.data[s.off]
 	s.off++
 	return b, nil
+}
+
+func (s *decodeState) peekByte() (byte, error) {
+	if s.off+1 > len(s.data) {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return s.data[s.off], nil
 }
 
 func (s *decodeState) readUint16() (uint16, error) {
@@ -443,5 +467,406 @@ func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 	}
+	return nil
+}
+
+// Valid reports whether data is a valid CBOR encoding.
+func Valid(data []byte) bool {
+	d := newDecodeState(data)
+	return d.checkValid() == nil
+}
+
+func (d *decodeState) checkValid() error {
+	typ, err := d.readByte()
+	if err != nil {
+		return err
+	}
+
+	switch typ {
+	// unsigned integer 0x00..0x17 (0..23)
+	case 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17:
+
+	// unsigned integer (one-byte uint8_t follows)
+	case 0x18:
+		if _, err := d.readByte(); err != nil {
+			return err
+		}
+
+	// unsigned integer (two-byte uint16_t follows)
+	case 0x19:
+		if _, err := d.readUint16(); err != nil {
+			return err
+		}
+
+	// unsigned integer (four-byte uint32_t follows)
+	case 0x1a:
+		if _, err := d.readUint32(); err != nil {
+			return err
+		}
+
+	// unsigned integer (eight-byte uint64_t follows)
+	case 0x1b:
+		if _, err := d.readUint64(); err != nil {
+			return err
+		}
+
+	// negative integer -1-0x00..-1-0x17 (-1..-24)
+	case 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37:
+
+	// negative integer -1-n (one-byte uint8_t for n follows)
+	case 0x38:
+		if _, err := d.readByte(); err != nil {
+			return err
+		}
+
+	// negative integer -1-n (two-byte uint16_t for n follows)
+	case 0x39:
+		if _, err := d.readUint16(); err != nil {
+			return err
+		}
+
+	// negative integer -1-n (four-byte uint32_t for n follows)
+	case 0x3a:
+		if _, err := d.readUint32(); err != nil {
+			return err
+		}
+
+	// negative integer -1-n (eight-byte uint64_t for n follows)
+	case 0x3b:
+		if _, err := d.readUint64(); err != nil {
+			return err
+		}
+
+	// byte string (0x00..0x17 bytes follow)
+	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
+		n := uint64(typ - 0x40)
+		if uint64(d.off)+n > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// byte string (one-byte uint8_t for n, and then n bytes follow)
+	case 0x58:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// byte string (two-byte uint16_t for n, and then n bytes follow)
+	case 0x59:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// byte string (four-byte uint32_t for n, and then n bytes follow)
+	case 0x5a:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// byte string (eight-byte uint64_t for n, and then n bytes follow)
+	case 0x5b:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// byte string (indefinite length)
+	case 0x5f:
+
+	// text string (0x00..0x17 bytes follow)
+	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
+		n := uint64(typ - 0x60)
+		if uint64(d.off)+n > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// text string (one-byte uint8_t for n, and then n bytes follow)
+	case 0x78:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// text string (two-byte uint16_t for n, and then n bytes follow)
+	case 0x79:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// text string (four-byte uint32_t for n, and then n bytes follow)
+	case 0x7a:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// text string (eight-byte uint64_t for n, and then n bytes follow)
+	case 0x7b:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
+			return io.ErrUnexpectedEOF
+		}
+
+	// text string (indefinite length)
+	case 0x7f:
+
+	// array (0x00..0x17 data items follow)
+	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97:
+		n := int(typ - 0x80)
+		for i := 0; i < n; i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// array (one-byte uint8_t for n, and then n data items follow)
+	case 0x98:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		for i := 0; i < int(n); i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// array (two-byte uint16_t for n, and then n data items follow)
+	case 0x99:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		for i := 0; i < int(n); i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// array (four-byte uint32_t for n, and then n data items follow)
+	case 0x9a:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		for i := uint64(0); i < uint64(n); i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// array (eight-byte uint64_t for n, and then n data items follow)
+	case 0x9b:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		for i := uint64(0); i < n; i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// array (indefinite length)
+	case 0x9f:
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				break
+			}
+
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// map (0x00..0x17 pairs of data items follow)
+	case 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7:
+		n := int(typ - 0xa0)
+		for i := 0; i < n; i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// map (one-byte uint8_t for n, and then n pairs of data items follow)
+	case 0xb8:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		for i := uint8(0); i < n; i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// map (two-byte uint16_t for n, and then n pairs of data items follow)
+	case 0xb9:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		for i := uint16(0); i < n; i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// map (four-byte uint32_t for n, and then n pairs of data items follow)
+	case 0xba:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		for i := uint32(0); i < n; i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// map (eight-byte uint64_t for n, and then n pairs of data items follow)
+	case 0xbb:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		for i := uint64(0); i < n; i++ {
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// map (indefinite length)
+	case 0xbf:
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				break
+			}
+
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+			if err := d.checkValid(); err != nil {
+				return err
+			}
+		}
+
+	// text-based date/time
+	case 0xc0:
+		var s string
+		if err := d.decode(&s); err != nil {
+			return err
+		}
+
+	// epoch-based date/time
+	case 0xc1:
+		// TODO: check that the integer is a valid date/time
+
+	// unsigned bignum (data item "byte string" follows)
+	case 0xc2:
+		// TODO: check that the byte string is a valid bignum
+
+	// negative bignum (data item "byte string" follows)
+	case 0xc3:
+		// TODO: check that the byte string is a valid bignum
+
+	// decimal fraction (data item "array" follows)
+	case 0xc4:
+		// TODO: check that the array is a valid decimal fraction
+
+	// bigfloat (data item "array" follows)
+	case 0xc5:
+		// TODO: check that the array is a valid bigfloat
+
+	// false
+	case 0xf4:
+
+	// true
+	case 0xf5:
+
+	// null
+	case 0xf6:
+
+	// undefined
+	case 0xf7:
+
+	// simple value (one-byte uint8_t follows)
+	case 0xf8:
+		if _, err := d.readByte(); err != nil {
+			return err
+		}
+
+	// half-precision float (two-byte IEEE 754)
+	case 0xf9:
+		if _, err := d.readUint16(); err != nil {
+			return err
+		}
+
+	// single-precision float (four-byte IEEE 754)
+	case 0xfa:
+		if _, err := d.readUint32(); err != nil {
+			return err
+		}
+
+	// double-precision float (eight-byte IEEE 754)
+	case 0xfb:
+		if _, err := d.readUint64(); err != nil {
+			return err
+		}
+
+	default:
+		return errors.New("cbor: err") // TODO: introduce SyntaxError
+	}
+
 	return nil
 }
