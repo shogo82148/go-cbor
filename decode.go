@@ -10,6 +10,8 @@ import (
 	"strconv"
 )
 
+var integerType = reflect.TypeOf(Integer{})
+
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
 // The input can be assumed to be a valid encoding of a CBOR value.
 // UnmarshalCBOR must copy the CBOR data if it wishes to retain the data after returning.
@@ -460,6 +462,12 @@ func (d *decodeState) decodePositiveInt(start int, w uint64, v reflect.Value) er
 			break
 		}
 		v.Set(reflect.ValueOf(int64(w)))
+	case reflect.Struct:
+		if v.Type() != integerType {
+			d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		v.Set(reflect.ValueOf(Integer{Value: w}))
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 	}
@@ -482,6 +490,12 @@ func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) er
 			break
 		}
 		v.Set(reflect.ValueOf(i))
+	case reflect.Struct:
+		if v.Type() != integerType {
+			d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		v.Set(reflect.ValueOf(Integer{Sign: true, Value: w}))
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 	}

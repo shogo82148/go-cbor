@@ -113,9 +113,20 @@ var unmarshalTests = []struct {
 		new(uint64),
 		ptr(uint64(18446744073709551615)),
 	},
+
 	// TODO: 18446744073709551616
-	// TODO: -18446744073709551616
+	// We need a big.Int type to represent this value.
+
+	{
+		"-18446744073709551616",
+		[]byte{0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		new(Integer),
+		&Integer{Sign: true, Value: 18446744073709551615},
+	},
+
 	// TODO: -18446744073709551617
+	// We need a big.Int type to represent this value.
+
 	{
 		"negative one",
 		[]byte{0x20},
