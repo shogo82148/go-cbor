@@ -343,6 +343,69 @@ var unmarshalTests = []struct {
 		new(string),
 		ptr("streaming"),
 	},
+	{
+		"zero-length array",
+		[]byte{0x80},
+		new([]int64),
+		ptr([]int64{}),
+	},
+	{
+		"array",
+		[]byte{0x83, 0x01, 0x02, 0x03},
+		new([]int64),
+		ptr([]int64{1, 2, 3}),
+	},
+	{
+		"array: [1, [2, 3], [4, 5]]",
+		[]byte{0x83, 0x01, 0x82, 0x02, 0x03, 0x82, 0x04, 0x05},
+		new([]any),
+		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
+	{
+		"25-elements array",
+		[]byte{
+			0x98, 0x19,
+			0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+			0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14,
+			0x15, 0x16, 0x17, 0x18, 0x18, 0x18, 0x19,
+		},
+		new([]int64),
+		ptr([]int64{
+			1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+			11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+			21, 22, 23, 24, 25,
+		}),
+	},
+	{
+		"zero-length indefinite-length array",
+		[]byte{0x9f, 0xff},
+		new([]int64),
+		ptr([]int64{}),
+	},
+	{
+		"indefinite-length array 1",
+		[]byte{0x9f, 0x01, 0x82, 0x02, 0x03, 0x9f, 0x04, 0x05, 0xff, 0xff},
+		new([]any),
+		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
+	{
+		"indefinite-length array 2",
+		[]byte{0x9f, 0x01, 0x82, 0x02, 0x03, 0x82, 0x04, 0x05, 0xff},
+		new([]any),
+		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
+	{
+		"indefinite-length array 3",
+		[]byte{0x83, 0x01, 0x82, 0x02, 0x03, 0x9f, 0x04, 0x05, 0xff},
+		new([]any),
+		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
+	{
+		"indefinite-length array 4",
+		[]byte{0x83, 0x01, 0x9f, 0x02, 0x03, 0xff, 0x82, 0x04, 0x05},
+		new([]any),
+		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
 
 	// decode to any
 	{
@@ -391,7 +454,7 @@ func TestUnmarshal(t *testing.T) {
 			if err := Unmarshal(tt.data, tt.ptr); err != nil {
 				t.Errorf("Unmarshal() error = %v", err)
 			}
-			if diff := cmp.Diff(tt.ptr, tt.want, cmpopts.EquateNaNs()); diff != "" {
+			if diff := cmp.Diff(tt.want, tt.ptr, cmpopts.EquateNaNs()); diff != "" {
 				t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
 			}
 		})
