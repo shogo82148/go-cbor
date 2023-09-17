@@ -903,5 +903,8 @@ func (d *decodeState) checkValid() error {
 		return errors.New("cbor: err") // TODO: introduce SyntaxError
 	}
 
+	if d.off < len(d.data) {
+		return errors.New("cbor: err") // TODO: introduce SyntaxError
+	}
 	return nil
 }
