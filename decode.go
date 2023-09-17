@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/bits"
 	"reflect"
+	"slices"
 	"strconv"
 )
 
@@ -324,6 +325,71 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.decodeNegativeInt(start, w, v)
 
+		// byte string (0x00..0x17 bytes follow)
+	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
+		n := uint64(typ - 0x40)
+		data, err := d.decodeBytes(start, n)
+		if err != nil {
+			return err
+		}
+		return d.setBytes(start, data, v)
+
+	// byte string (one-byte uint8_t for n, and then n bytes follow)
+	case 0x58:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		data, err := d.decodeBytes(start, uint64(n))
+		if err != nil {
+			return err
+		}
+		return d.setBytes(start, data, v)
+
+	// byte string (two-byte uint16_t for n, and then n bytes follow)
+	case 0x59:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		data, err := d.decodeBytes(start, uint64(n))
+		if err != nil {
+			return err
+		}
+		return d.setBytes(start, data, v)
+
+	// byte string (four-byte uint32_t for n, and then n bytes follow)
+	case 0x5a:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		data, err := d.decodeBytes(start, uint64(n))
+		if err != nil {
+			return err
+		}
+		return d.setBytes(start, data, v)
+
+	// byte string (eight-byte uint64_t for n, and then n bytes follow)
+	case 0x5b:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		data, err := d.decodeBytes(start, n)
+		if err != nil {
+			return err
+		}
+		return d.setBytes(start, data, v)
+
+	// byte string (indefinite length)
+	case 0x5f:
+		data, err := d.decodeBytesIndefinite()
+		if err != nil {
+			return err
+		}
+		return d.setBytes(start, data, v)
+
 	// half-precision float (two-byte IEEE 754)
 	case 0xf9:
 		w, err := d.readUint16()
@@ -451,7 +517,6 @@ func (d *decodeState) decodeFloat64(start int, w uint64, v reflect.Value) error 
 }
 
 func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
-	_, v = indirect(v, false)
 	switch v.Kind() {
 	case reflect.Float32, reflect.Float64:
 		if v.OverflowFloat(f) {
@@ -470,6 +535,81 @@ func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
 	return nil
 }
 
+func (d *decodeState) decodeBytes(start int, n uint64) ([]byte, error) {
+	if uint64(d.off)+n > uint64(len(d.data)) {
+		return nil, d.newSyntaxError("cbor: unexpected end")
+	}
+	return slices.Clone(d.data[d.off : d.off+int(n)]), nil
+}
+
+func (d *decodeState) decodeBytesIndefinite() ([]byte, error) {
+	var s []byte
+	for {
+		var n uint64
+		typ, err := d.readByte()
+		if err != nil {
+			return nil, err
+		}
+		switch {
+		case typ == 0xff:
+			return s, nil
+		case typ >= 0x40 && typ <= 0x57:
+			n = uint64(typ - 0x40)
+		case typ == 0x58:
+			m, err := d.readByte()
+			if err != nil {
+				return nil, err
+			}
+			n = uint64(m)
+		case typ == 0x59:
+			m, err := d.readUint16()
+			if err != nil {
+				return nil, err
+			}
+			n = uint64(m)
+		case typ == 0x5a:
+			m, err := d.readUint32()
+			if err != nil {
+				return nil, err
+			}
+			n = uint64(m)
+		case typ == 0x5b:
+			m, err := d.readUint64()
+			if err != nil {
+				return nil, err
+			}
+			n = m
+		default:
+			return nil, d.newSyntaxError("cbor: invalid byte string chunk type")
+		}
+		if uint64(d.off)+n > uint64(len(d.data)) {
+			return nil, d.newSyntaxError("cbor: unexpected end")
+		}
+		s = append(s, d.data[d.off:d.off+int(n)]...)
+		d.off += int(n)
+	}
+}
+
+func (d *decodeState) setBytes(start int, data []byte, v reflect.Value) error {
+	switch v.Kind() {
+	case reflect.Slice:
+		if v.Type().Elem().Kind() != reflect.Uint8 {
+			d.saveError(&UnmarshalTypeError{Value: "bytes", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		v.SetBytes(data)
+	case reflect.Interface:
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "bytes", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		v.Set(reflect.ValueOf(data))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "bytes", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
+}
+
 // Valid reports whether data is a valid CBOR encoding.
 func Valid(data []byte) bool {
 	d := newDecodeState(data)
@@ -477,6 +617,16 @@ func Valid(data []byte) bool {
 }
 
 func (d *decodeState) checkValid() error {
+	if err := d.checkValidChild(); err != nil {
+		return err
+	}
+	if d.off != len(d.data) {
+		return d.newSyntaxError("cbor: unexpected data after top-level value")
+	}
+	return nil
+}
+
+func (d *decodeState) checkValidChild() error {
 	typ, err := d.readByte()
 	if err != nil {
 		return err
@@ -543,6 +693,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+n > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (one-byte uint8_t for n, and then n bytes follow)
 	case 0x58:
@@ -553,6 +704,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (two-byte uint16_t for n, and then n bytes follow)
 	case 0x59:
@@ -563,6 +715,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (four-byte uint32_t for n, and then n bytes follow)
 	case 0x5a:
@@ -573,6 +726,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (eight-byte uint64_t for n, and then n bytes follow)
 	case 0x5b:
@@ -583,6 +737,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (indefinite length)
 	case 0x5f:
@@ -592,12 +747,13 @@ func (d *decodeState) checkValid() error {
 				return err
 			}
 			if typ == 0xff {
+				d.off++
 				break
 			}
 			if typ < 0x40 || typ > 0x5b {
 				return errors.New("cbor: invalid byte string")
 			}
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -608,6 +764,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+n > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (one-byte uint8_t for n, and then n bytes follow)
 	case 0x78:
@@ -618,6 +775,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (two-byte uint16_t for n, and then n bytes follow)
 	case 0x79:
@@ -628,6 +786,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (four-byte uint32_t for n, and then n bytes follow)
 	case 0x7a:
@@ -638,6 +797,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (eight-byte uint64_t for n, and then n bytes follow)
 	case 0x7b:
@@ -648,6 +808,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (indefinite length)
 	case 0x7f:
@@ -657,12 +818,13 @@ func (d *decodeState) checkValid() error {
 				return err
 			}
 			if typ == 0xff {
+				d.off++
 				break
 			}
 			if typ < 0x60 || typ > 0x7b {
 				return errors.New("cbor: invalid byte string")
 			}
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -671,7 +833,7 @@ func (d *decodeState) checkValid() error {
 	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97:
 		n := int(typ - 0x80)
 		for i := 0; i < n; i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -683,7 +845,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		for i := 0; i < int(n); i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -695,7 +857,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		for i := 0; i < int(n); i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -707,7 +869,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		for i := uint64(0); i < uint64(n); i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -719,7 +881,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		for i := uint64(0); i < n; i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -732,10 +894,11 @@ func (d *decodeState) checkValid() error {
 				return err
 			}
 			if typ == 0xff {
+				d.off++
 				break
 			}
 
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -744,10 +907,10 @@ func (d *decodeState) checkValid() error {
 	case 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7:
 		n := int(typ - 0xa0)
 		for i := 0; i < n; i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -759,10 +922,10 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		for i := uint8(0); i < n; i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -774,10 +937,10 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		for i := uint16(0); i < n; i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -789,10 +952,10 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		for i := uint32(0); i < n; i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -804,10 +967,10 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		for i := uint64(0); i < n; i++ {
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -820,13 +983,14 @@ func (d *decodeState) checkValid() error {
 				return err
 			}
 			if typ == 0xff {
+				d.off++
 				break
 			}
 
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
-			if err := d.checkValid(); err != nil {
+			if err := d.checkValidChild(); err != nil {
 				return err
 			}
 		}
@@ -902,9 +1066,6 @@ func (d *decodeState) checkValid() error {
 		return d.newSyntaxError("cbor: unknown initial byte: " + strconv.Itoa(int(typ)))
 	}
 
-	if d.off < len(d.data) {
-		return d.newSyntaxError("cbor: trailing data")
-	}
 	return nil
 }
 
