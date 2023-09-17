@@ -285,10 +285,52 @@ var unmarshalTests = []struct {
 		ptr([]byte{0x01, 0x02, 0x03, 0x04}),
 	},
 	{
+		"utf8 string",
+		[]byte{0x60},
+		new(string),
+		ptr(""),
+	},
+	{
+		"utf8 string: \"IETF\"",
+		[]byte{0x64, 0x49, 0x45, 0x54, 0x46},
+		new(string),
+		ptr("IETF"),
+	},
+	{
+		`utf8 string: "\"\\"`,
+		[]byte{0x62, 0x22, 0x5c},
+		new(string),
+		ptr("\"\\"),
+	},
+	{
+		`utf8 string: "\u00fc"`,
+		[]byte{0x62, 0xc3, 0xbc},
+		new(string),
+		ptr("\u00fc"),
+	},
+	{
+		`utf8 string: "\u6c34"`,
+		[]byte{0x63, 0xe6, 0xb0, 0xb4},
+		new(string),
+		ptr("\u6c34"),
+	},
+	{
+		`utf8 string: "\ud800\udd51"`,
+		[]byte{0x64, 0xf0, 0x90, 0x85, 0x91},
+		new(string),
+		ptr("\xf0\x90\x85\x91"),
+	},
+	{
 		"indefinite-length byte string",
 		[]byte{0x5f, 0x42, 0x01, 0x02, 0x43, 0x03, 0x4, 0x05, 0xff},
 		new([]byte),
 		ptr([]byte{0x01, 0x02, 0x03, 0x04, 0x05}),
+	},
+	{
+		"indefinite-length utf8 string",
+		[]byte{0x7f, 0x65, 0x73, 0x74, 0x72, 0x65, 0x61, 0x64, 0x6d, 0x69, 0x6e, 0x67, 0xff},
+		new(string),
+		ptr("streaming"),
 	},
 
 	// decode to any
@@ -315,6 +357,12 @@ var unmarshalTests = []struct {
 		[]byte{0x44, 0x01, 0x02, 0x03, 0x04},
 		new(any),
 		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+	{
+		"decode utf8 string to any",
+		[]byte{0x64, 0x49, 0x45, 0x54, 0x46},
+		new(any),
+		ptr(any("IETF")),
 	},
 
 	// Unmarshaler
