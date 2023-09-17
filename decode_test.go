@@ -376,6 +376,36 @@ var unmarshalTests = []struct {
 			21, 22, 23, 24, 25,
 		}),
 	},
+	{
+		"zero-length indefinite-length array",
+		[]byte{0x9f, 0xff},
+		new([]int64),
+		ptr([]int64{}),
+	},
+	{
+		"indefinite-length array 1",
+		[]byte{0x9f, 0x01, 0x82, 0x02, 0x03, 0x9f, 0x04, 0x05, 0xff, 0xff},
+		new([]any),
+		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
+	{
+		"indefinite-length array 2",
+		[]byte{0x9f, 0x01, 0x82, 0x02, 0x03, 0x82, 0x04, 0x05, 0xff},
+		new([]any),
+		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
+	{
+		"indefinite-length array 3",
+		[]byte{0x83, 0x01, 0x82, 0x02, 0x03, 0x9f, 0x04, 0x05, 0xff},
+		new([]any),
+		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
+	{
+		"indefinite-length array 4",
+		[]byte{0x83, 0x01, 0x9f, 0x02, 0x03, 0xff, 0x82, 0x04, 0x05},
+		new([]any),
+		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
 
 	// decode to any
 	{
@@ -424,7 +454,7 @@ func TestUnmarshal(t *testing.T) {
 			if err := Unmarshal(tt.data, tt.ptr); err != nil {
 				t.Errorf("Unmarshal() error = %v", err)
 			}
-			if diff := cmp.Diff(tt.ptr, tt.want, cmpopts.EquateNaNs()); diff != "" {
+			if diff := cmp.Diff(tt.want, tt.ptr, cmpopts.EquateNaNs()); diff != "" {
 				t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
 			}
 		})

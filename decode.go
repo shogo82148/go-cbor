@@ -14,6 +14,7 @@ import (
 
 var integerType = reflect.TypeOf(Integer{})
 var anySlice = reflect.TypeOf([]any(nil))
+var anyType = anySlice.Elem()
 
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
 // The input can be assumed to be a valid encoding of a CBOR value.
@@ -834,10 +835,10 @@ func (d *decodeState) decodeArray(start int, n uint64, v reflect.Value) error {
 		if v.NumMethod() != 0 {
 			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
 		}
-		w := reflect.MakeSlice(anySlice, int(n), int(n))
-		v.Set(w)
+		s := reflect.MakeSlice(anySlice, int(n), int(n))
+		v.Set(s)
 		for i := 0; i < int(n); i++ {
-			if err := d.decodeReflectValue(w.Index(i)); err != nil {
+			if err := d.decodeReflectValue(s.Index(i)); err != nil {
 				return err
 			}
 		}
@@ -848,7 +849,67 @@ func (d *decodeState) decodeArray(start int, n uint64, v reflect.Value) error {
 }
 
 func (d *decodeState) decodeArrayIndefinite(start int, v reflect.Value) error {
-	return errors.New("TODO: implement")
+	switch v.Kind() {
+	case reflect.Slice:
+		i := 0
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				d.off++
+				break
+			}
+
+			// Expand slice length, growing the slice if necessary.
+			if i >= v.Cap() {
+				v.Grow(1)
+			}
+			if i >= v.Len() {
+				v.SetLen(i + 1)
+			}
+
+			// Decode into the slice element.
+			if err := d.decodeReflectValue(v.Index(i)); err != nil {
+				return err
+			}
+			i++
+		}
+		v.SetLen(i)
+		if i == 0 {
+			v.Set(reflect.MakeSlice(v.Type(), 0, 0))
+		}
+	case reflect.Interface:
+		// Decoding into nil interface? Switch to non-reflect code.
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
+		}
+
+		s := []any{}
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				d.off++
+				break
+			}
+
+			var e any
+			if err := d.decode(&e); err != nil {
+				return err
+			}
+			s = append(s, e)
+		}
+		v.Set(reflect.ValueOf(s))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
+		return nil
+	}
+
+	return nil
 }
 
 // Valid reports whether data is a valid CBOR encoding.
