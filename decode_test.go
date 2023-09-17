@@ -9,6 +9,29 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
+func TestDecodeState_isAvailable(t *testing.T) {
+	d := &decodeState{
+		data: []byte{0x00, 0x00},
+		off:  1,
+	}
+	if !d.isAvailable(1) {
+		t.Errorf("IsAvailable(1) = false, want true")
+	}
+	if d.isAvailable(2) {
+		t.Errorf("IsAvailable(2) = true, want false")
+	}
+
+	// 1 + max.MaxInt overflows int
+	if d.isAvailable(math.MaxInt) {
+		t.Errorf("IsAvailable(math.MaxInt) = true, want false")
+	}
+
+	// int(math.MaxUint64) overflows int
+	if d.isAvailable(math.MaxUint64) {
+		t.Errorf("IsAvailable(math.MaxUint64) = true, want false")
+	}
+}
+
 func ptr[T any](v T) *T {
 	return &v
 }
