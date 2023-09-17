@@ -556,6 +556,20 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 	case 0xbf:
 		return d.decodeMapIndefinite(start, v)
 
+	// false
+	case 0xf4:
+		if u != nil {
+			return u.UnmarshalCBOR(d.data[start:d.off])
+		}
+		return d.setBool(start, false, v)
+
+	// true
+	case 0xf5:
+		if u != nil {
+			return u.UnmarshalCBOR(d.data[start:d.off])
+		}
+		return d.setBool(start, true, v)
+
 	// half-precision float (two-byte IEEE 754)
 	case 0xf9:
 		w, err := d.readUint16()
@@ -1058,6 +1072,22 @@ func (d *decodeState) decodeMapIndefinite(start int, v reflect.Value) error {
 
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "map", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
+}
+
+func (d *decodeState) setBool(start int, b bool, v reflect.Value) error {
+	switch v.Kind() {
+	case reflect.Bool:
+		v.SetBool(b)
+	case reflect.Interface:
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "bool", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		v.Set(reflect.ValueOf(b))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "bool", Type: v.Type(), Offset: int64(start)})
 	}
 	return nil
 }

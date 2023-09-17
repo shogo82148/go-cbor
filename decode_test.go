@@ -284,6 +284,43 @@ var unmarshalTests = []struct {
 		ptr(math.Inf(-1)),
 	},
 	{
+		"false",
+		[]byte{0xf4},
+		new(bool),
+		ptr(false),
+	},
+	{
+		"true",
+		[]byte{0xf5},
+		new(bool),
+		ptr(true),
+	},
+	// TODO:
+	// {
+	// 	"null",
+	// 	[]byte{0xf6},
+	// 	new(*int64),
+	// 	ptr((*int64)(nil)),
+	// },
+	// {
+	// 	"undefined",
+	// 	[]byte{0xf7},
+	// 	new(any),
+	// 	ptr(any(Undefined)),
+	// },
+	// {
+	// 	"simple(16)",
+	// 	[]byte{0xf0},
+	// 	new(any),
+	// 	ptr(any(16)),
+	// },
+	// {
+	// 	"simple(255)",
+	// 	[]byte{0xf8, 0xff},
+	// 	new(any),
+	// 	ptr(any(255)),
+	// },
+	{
 		"zero-length byte string",
 		[]byte{0x40},
 		new([]byte),
