@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/bits"
 	"reflect"
+	"slices"
 	"strconv"
 )
 
@@ -324,6 +325,47 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.decodeNegativeInt(start, w, v)
 
+		// byte string (0x00..0x17 bytes follow)
+	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
+		n := uint64(typ - 0x40)
+		return d.decodeBytes(start, n, v)
+
+	// byte string (one-byte uint8_t for n, and then n bytes follow)
+	case 0x58:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		return d.decodeBytes(start, uint64(n), v)
+
+	// byte string (two-byte uint16_t for n, and then n bytes follow)
+	case 0x59:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		return d.decodeBytes(start, uint64(n), v)
+
+	// byte string (four-byte uint32_t for n, and then n bytes follow)
+	case 0x5a:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		return d.decodeBytes(start, uint64(n), v)
+
+	// byte string (eight-byte uint64_t for n, and then n bytes follow)
+	case 0x5b:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		return d.decodeBytes(start, n, v)
+
+	// byte string (indefinite length)
+	case 0x5f:
+		return d.decodeBytesIndefinite(start, v)
+
 	// half-precision float (two-byte IEEE 754)
 	case 0xf9:
 		w, err := d.readUint16()
@@ -451,7 +493,6 @@ func (d *decodeState) decodeFloat64(start int, w uint64, v reflect.Value) error 
 }
 
 func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
-	_, v = indirect(v, false)
 	switch v.Kind() {
 	case reflect.Float32, reflect.Float64:
 		if v.OverflowFloat(f) {
@@ -467,6 +508,26 @@ func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 	}
+	return nil
+}
+
+func (d *decodeState) decodeBytes(start int, n uint64, v reflect.Value) error {
+	switch v.Kind() {
+	case reflect.Slice:
+		if v.Type().Elem().Kind() != reflect.Uint8 {
+			d.saveError(&UnmarshalTypeError{Value: "bytes", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		if uint64(d.off)+n > uint64(len(d.data)) {
+			return d.newSyntaxError("cbor: unexpected end")
+		}
+		s := slices.Clone(d.data[d.off : d.off+int(n)])
+		v.SetBytes(s)
+	}
+	return nil
+}
+
+func (d *decodeState) decodeBytesIndefinite(start int, v reflect.Value) error {
 	return nil
 }
 

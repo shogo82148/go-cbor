@@ -249,6 +249,18 @@ var unmarshalTests = []struct {
 		new(float64),
 		ptr(math.Inf(-1)),
 	},
+	{
+		"zero-length byte string",
+		[]byte{0x40},
+		new([]byte),
+		ptr([]byte{}),
+	},
+	{
+		"byte string",
+		[]byte{0x44, 0x01, 0x02, 0x03, 0x04},
+		new([]byte),
+		ptr([]byte{0x01, 0x02, 0x03, 0x04}),
+	},
 
 	// decode to any
 	{
