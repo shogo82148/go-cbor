@@ -16,6 +16,7 @@ import (
 var integerType = reflect.TypeOf(Integer{})
 var anySliceType = reflect.TypeOf([]any(nil))
 var simpleType = reflect.TypeOf(Simple(0))
+var tagType = reflect.TypeOf(Tag{})
 
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
 // The input can be assumed to be a valid encoding of a CBOR value.

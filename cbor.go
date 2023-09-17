@@ -77,3 +77,12 @@ func (i Integer) String() string {
 
 // Simple is a CBOR simple type.
 type Simple byte
+
+// TagNumber is a CBOR tag number type.
+type TagNumber uint64
+
+// Tag is a CBOR tag.
+type Tag struct {
+	Number  TagNumber
+	Content any
+}
