@@ -135,7 +135,7 @@ func (s *decodeState) readUint64() (uint64, error) {
 
 // isAvailable reports whether n bytes are available.
 func (s *decodeState) isAvailable(n uint64) bool {
-	if n >= math.MaxInt {
+	if n > math.MaxInt {
 		// int(n) will overflow
 		return false
 	}
