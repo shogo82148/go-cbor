@@ -548,14 +548,6 @@ var unmarshalTests = []struct {
 		new(any),
 		ptr(any(Simple(255))),
 	},
-
-	// Unmarshaler
-	{
-		"Unmarshaler",
-		[]byte{0x00},
-		new(RawMessage),
-		&RawMessage{0x00},
-	},
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -565,6 +557,20 @@ func TestUnmarshal(t *testing.T) {
 				t.Errorf("Unmarshal() error = %v", err)
 			}
 			if diff := cmp.Diff(tt.want, tt.ptr, cmpopts.EquateNaNs()); diff != "" {
+				t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestUnmarshal_Unmarshaler(t *testing.T) {
+	for _, tt := range unmarshalTests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got RawMessage
+			if err := Unmarshal(tt.data, &got); err != nil {
+				t.Errorf("Unmarshal() error = %v", err)
+			}
+			if diff := cmp.Diff(tt.data, []byte(got)); diff != "" {
 				t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
 			}
 		})

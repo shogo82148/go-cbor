@@ -1,12 +1,13 @@
 package cbor
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"math"
 	"math/bits"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -348,11 +349,11 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		// byte string (0x00..0x17 bytes follow)
 	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
 		n := uint64(typ - 0x40)
-		data, err := d.decodeBytes(start, n)
+		err := d.decodeBytes(start, n, u, v)
 		if err != nil {
 			return err
 		}
-		return d.setBytes(start, data, v)
+		return nil
 
 	// byte string (one-byte uint8_t for n, and then n bytes follow)
 	case 0x58:
@@ -360,11 +361,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		data, err := d.decodeBytes(start, uint64(n))
-		if err != nil {
-			return err
-		}
-		return d.setBytes(start, data, v)
+		return d.decodeBytes(start, uint64(n), u, v)
 
 	// byte string (two-byte uint16_t for n, and then n bytes follow)
 	case 0x59:
@@ -372,11 +369,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		data, err := d.decodeBytes(start, uint64(n))
-		if err != nil {
-			return err
-		}
-		return d.setBytes(start, data, v)
+		return d.decodeBytes(start, uint64(n), u, v)
 
 	// byte string (four-byte uint32_t for n, and then n bytes follow)
 	case 0x5a:
@@ -384,11 +377,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		data, err := d.decodeBytes(start, uint64(n))
-		if err != nil {
-			return err
-		}
-		return d.setBytes(start, data, v)
+		return d.decodeBytes(start, uint64(n), u, v)
 
 	// byte string (eight-byte uint64_t for n, and then n bytes follow)
 	case 0x5b:
@@ -396,28 +385,16 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		data, err := d.decodeBytes(start, n)
-		if err != nil {
-			return err
-		}
-		return d.setBytes(start, data, v)
+		return d.decodeBytes(start, n, u, v)
 
 	// byte string (indefinite length)
 	case 0x5f:
-		data, err := d.decodeBytesIndefinite()
-		if err != nil {
-			return err
-		}
-		return d.setBytes(start, data, v)
+		return d.decodeBytesIndefinite(start, u, v)
 
 	// UTF-8 string (0x00..0x17 bytes follow)
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
 		n := uint64(typ - 0x60)
-		data, err := d.decodeString(start, n)
-		if err != nil {
-			return err
-		}
-		return d.setString(start, data, v)
+		return d.decodeString(start, n, u, v)
 
 	// UTF-8 string (one-byte uint8_t for n, and then n bytes follow)
 	case 0x78:
@@ -425,11 +402,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		data, err := d.decodeString(start, uint64(n))
-		if err != nil {
-			return err
-		}
-		return d.setString(start, data, v)
+		return d.decodeString(start, uint64(n), u, v)
 
 	// UTF-8 string (two-byte uint16_t for n, and then n bytes follow)
 	case 0x79:
@@ -437,11 +410,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		data, err := d.decodeString(start, uint64(n))
-		if err != nil {
-			return err
-		}
-		return d.setString(start, data, v)
+		return d.decodeString(start, uint64(n), u, v)
 
 	// UTF-8 string (four-byte uint32_t for n, and then n bytes follow)
 	case 0x7a:
@@ -449,11 +418,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		data, err := d.decodeString(start, uint64(n))
-		if err != nil {
-			return err
-		}
-		return d.setString(start, data, v)
+		return d.decodeString(start, uint64(n), u, v)
 
 	// UTF-8 string (eight-byte uint64_t for n, and then n bytes follow)
 	case 0x7b:
@@ -461,24 +426,16 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		data, err := d.decodeString(start, n)
-		if err != nil {
-			return err
-		}
-		return d.setString(start, data, v)
+		return d.decodeString(start, n, u, v)
 
 	// UTF-8 string (indefinite length)
 	case 0x7f:
-		data, err := d.decodeStringIndefinite()
-		if err != nil {
-			return err
-		}
-		return d.setString(start, data, v)
+		return d.decodeStringIndefinite(start, u, v)
 
 		// array (0x00..0x17 data items follow)
 	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97:
 		n := int(typ - 0x80)
-		return d.decodeArray(start, uint64(n), v)
+		return d.decodeArray(start, uint64(n), u, v)
 
 	// array (one-byte uint8_t for n, and then n data items follow)
 	case 0x98:
@@ -486,7 +443,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		return d.decodeArray(start, uint64(n), v)
+		return d.decodeArray(start, uint64(n), u, v)
 
 	// array (two-byte uint16_t for n, and then n data items follow)
 	case 0x99:
@@ -494,7 +451,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		return d.decodeArray(start, uint64(n), v)
+		return d.decodeArray(start, uint64(n), u, v)
 
 	// array (four-byte uint32_t for n, and then n data items follow)
 	case 0x9a:
@@ -502,7 +459,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		return d.decodeArray(start, uint64(n), v)
+		return d.decodeArray(start, uint64(n), u, v)
 
 	// array (eight-byte uint64_t for n, and then n data items follow)
 	case 0x9b:
@@ -510,16 +467,16 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		return d.decodeArray(start, n, v)
+		return d.decodeArray(start, n, u, v)
 
 	// array (indefinite length)
 	case 0x9f:
-		return d.decodeArrayIndefinite(start, v)
+		return d.decodeArrayIndefinite(start, u, v)
 
 	// map (0x00..0x17 pairs of data items follow)
 	case 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7:
 		n := int(typ - 0xa0)
-		return d.decodeMap(start, uint64(n), v)
+		return d.decodeMap(start, uint64(n), u, v)
 
 	// map (one-byte uint8_t for n, and then n pairs of data items follow)
 	case 0xb8:
@@ -527,7 +484,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		return d.decodeMap(start, uint64(n), v)
+		return d.decodeMap(start, uint64(n), u, v)
 
 	// map (two-byte uint16_t for n, and then n pairs of data items follow)
 	case 0xb9:
@@ -535,7 +492,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		return d.decodeMap(start, uint64(n), v)
+		return d.decodeMap(start, uint64(n), u, v)
 
 	// map (four-byte uint32_t for n, and then n pairs of data items follow)
 	case 0xba:
@@ -543,7 +500,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		return d.decodeMap(start, uint64(n), v)
+		return d.decodeMap(start, uint64(n), u, v)
 
 	// map (eight-byte uint64_t for n, and then n pairs of data items follow)
 	case 0xbb:
@@ -551,11 +508,11 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		return d.decodeMap(start, n, v)
+		return d.decodeMap(start, n, u, v)
 
 	// map (indefinite length)
 	case 0xbf:
-		return d.decodeMapIndefinite(start, v)
+		return d.decodeMapIndefinite(start, u, v)
 
 	// simple values
 	case 0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xf0, 0xf3:
@@ -594,12 +551,12 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 	// simple value (one-byte uint8_t follows)
 	case 0xf8:
-		if u != nil {
-			return u.UnmarshalCBOR(d.data[start:d.off])
-		}
 		n, err := d.readByte()
 		if err != nil {
 			return err
+		}
+		if u != nil {
+			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
 		return d.setSimple(start, Simple(n), v)
 
@@ -759,59 +716,73 @@ func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
 	return nil
 }
 
-func (d *decodeState) decodeBytes(start int, n uint64) ([]byte, error) {
+func (d *decodeState) decodeBytes(start int, n uint64, u Unmarshaler, v reflect.Value) error {
 	if !d.isAvailable(n) {
-		return nil, d.newSyntaxError("cbor: unexpected end")
+		return d.newSyntaxError("cbor: unexpected end")
 	}
-	return slices.Clone(d.data[d.off : d.off+int(n)]), nil
+	off := d.off
+	d.off += int(n)
+	if u != nil {
+		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
+	s := bytes.Clone(d.data[off : off+int(n)])
+	return d.setBytes(start, s, v)
 }
 
-func (d *decodeState) decodeBytesIndefinite() ([]byte, error) {
+func (d *decodeState) decodeBytesIndefinite(start int, u Unmarshaler, v reflect.Value) error {
 	var s []byte
+
+LOOP:
 	for {
 		var n uint64
 		typ, err := d.readByte()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		switch {
 		case typ == 0xff:
-			return s, nil
+			break LOOP
 		case typ >= 0x40 && typ <= 0x57:
 			n = uint64(typ - 0x40)
 		case typ == 0x58:
 			m, err := d.readByte()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			n = uint64(m)
 		case typ == 0x59:
 			m, err := d.readUint16()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			n = uint64(m)
 		case typ == 0x5a:
 			m, err := d.readUint32()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			n = uint64(m)
 		case typ == 0x5b:
 			m, err := d.readUint64()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			n = m
 		default:
-			return nil, d.newSyntaxError("cbor: invalid byte string chunk type")
+			return d.newSyntaxError("cbor: invalid byte string chunk type")
 		}
 		if !d.isAvailable(n) {
-			return nil, d.newSyntaxError("cbor: unexpected end")
+			return d.newSyntaxError("cbor: unexpected end")
 		}
-		s = append(s, d.data[d.off:d.off+int(n)]...)
+		if u == nil {
+			s = append(s, d.data[d.off:d.off+int(n)]...)
+		}
 		d.off += int(n)
 	}
+	if u != nil {
+		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
+	return d.setBytes(start, s, v)
 }
 
 func (d *decodeState) setBytes(start int, data []byte, v reflect.Value) error {
@@ -834,62 +805,79 @@ func (d *decodeState) setBytes(start int, data []byte, v reflect.Value) error {
 	return nil
 }
 
-func (d *decodeState) decodeString(start int, n uint64) (string, error) {
+func (d *decodeState) decodeString(start int, n uint64, u Unmarshaler, v reflect.Value) error {
 	if !d.isAvailable(n) {
-		return "", d.newSyntaxError("cbor: unexpected end")
+		return d.newSyntaxError("cbor: unexpected end")
 	}
-	// UTF-8 validation is done by the checkValid method; wo don't need to do it here.
-	s := string(d.data[d.off : d.off+int(n)])
+	off := d.off
 	d.off += int(n)
-	return s, nil
+	if u != nil {
+		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
+
+	// UTF-8 validation is done by the checkValid method; wo don't need to do it here.
+	s := string(d.data[off : off+int(n)])
+	return d.setString(start, s, v)
 }
 
-func (d *decodeState) decodeStringIndefinite() (string, error) {
-	var buf strings.Builder
+func (d *decodeState) decodeStringIndefinite(start int, u Unmarshaler, v reflect.Value) error {
+	var w io.Writer
+	var builder *strings.Builder
+	if u != nil {
+		w = io.Discard
+	} else {
+		builder = new(strings.Builder)
+		w = builder
+	}
+LOOP:
 	for {
 		var n uint64
 		typ, err := d.readByte()
 		if err != nil {
-			return "", err
+			return err
 		}
 		switch {
 		case typ == 0xff:
-			return buf.String(), nil
+			break LOOP
 		case typ >= 0x60 && typ <= 0x77:
 			n = uint64(typ - 0x60)
 		case typ == 0x78:
 			m, err := d.readByte()
 			if err != nil {
-				return "", err
+				return err
 			}
 			n = uint64(m)
 		case typ == 0x79:
 			m, err := d.readUint16()
 			if err != nil {
-				return "", err
+				return err
 			}
 			n = uint64(m)
 		case typ == 0x7a:
 			m, err := d.readUint32()
 			if err != nil {
-				return "", err
+				return err
 			}
 			n = uint64(m)
 		case typ == 0x7b:
 			m, err := d.readUint64()
 			if err != nil {
-				return "", err
+				return err
 			}
 			n = m
 		default:
-			return "", d.newSyntaxError("cbor: invalid byte string chunk type")
+			return d.newSyntaxError("cbor: invalid byte string chunk type")
 		}
 		if !d.isAvailable(n) {
-			return "", d.newSyntaxError("cbor: unexpected end")
+			return d.newSyntaxError("cbor: unexpected end")
 		}
-		buf.Write(d.data[d.off : d.off+int(n)])
+		w.Write(d.data[d.off : d.off+int(n)])
 		d.off += int(n)
 	}
+	if u != nil {
+		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
+	return d.setString(start, builder.String(), v)
 }
 
 func (d *decodeState) setString(start int, s string, v reflect.Value) error {
@@ -908,7 +896,15 @@ func (d *decodeState) setString(start int, s string, v reflect.Value) error {
 	return nil
 }
 
-func (d *decodeState) decodeArray(start int, n uint64, v reflect.Value) error {
+func (d *decodeState) decodeArray(start int, n uint64, u Unmarshaler, v reflect.Value) error {
+	if u != nil {
+		for i := 0; i < int(n); i++ {
+			if err := d.checkValidChild(); err != nil {
+				return err
+			}
+		}
+		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
 	switch v.Kind() {
 	case reflect.Slice:
 		if c := uint64(v.Cap()); c < n || (c == 0 && n == 0) {
@@ -937,7 +933,23 @@ func (d *decodeState) decodeArray(start int, n uint64, v reflect.Value) error {
 	return nil
 }
 
-func (d *decodeState) decodeArrayIndefinite(start int, v reflect.Value) error {
+func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.Value) error {
+	if u != nil {
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				d.off++
+				break
+			}
+			if err := d.checkValidChild(); err != nil {
+				return err
+			}
+		}
+		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
 	switch v.Kind() {
 	case reflect.Slice:
 		i := 0
@@ -1001,7 +1013,19 @@ func (d *decodeState) decodeArrayIndefinite(start int, v reflect.Value) error {
 	return nil
 }
 
-func (d *decodeState) decodeMap(start int, n uint64, v reflect.Value) error {
+func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Value) error {
+	if u != nil {
+		for i := 0; i < int(n); i++ {
+			if err := d.checkValidChild(); err != nil {
+				return nil
+			}
+			if err := d.checkValidChild(); err != nil {
+				return nil
+			}
+		}
+		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
+
 	switch v.Kind() {
 	case reflect.Map:
 		if v.IsNil() {
@@ -1046,7 +1070,26 @@ func (d *decodeState) decodeMap(start int, n uint64, v reflect.Value) error {
 	return nil
 }
 
-func (d *decodeState) decodeMapIndefinite(start int, v reflect.Value) error {
+func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Value) error {
+	if u != nil {
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				d.off++
+				break
+			}
+			if err := d.checkValidChild(); err != nil {
+				return err
+			}
+			if err := d.checkValidChild(); err != nil {
+				return err
+			}
+		}
+		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
 	switch v.Kind() {
 	case reflect.Map:
 		if v.IsNil() {
@@ -1363,7 +1406,8 @@ func (d *decodeState) checkValidChild() error {
 
 	// text string (indefinite length)
 	case 0x7f:
-		s, err := d.decodeStringIndefinite()
+		var s string
+		err := d.decodeStringIndefinite(d.off-1, nil, reflect.ValueOf(&s).Elem())
 		if err != nil {
 			return err
 		}
