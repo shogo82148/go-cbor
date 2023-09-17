@@ -58,7 +58,7 @@ func Unmarshal(data []byte, v any) error {
 	// Check for well-formedness.
 	// Avoids filling out half a data structure
 	// before discovering a JSON syntax error.
-	if err := d.checkValidChild(); err != nil {
+	if err := d.checkValid(); err != nil {
 		return err
 	}
 
