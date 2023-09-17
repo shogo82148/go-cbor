@@ -872,8 +872,13 @@ func (d *decodeState) checkValid() error {
 
 	// simple value (one-byte uint8_t follows)
 	case 0xf8:
-		if _, err := d.readByte(); err != nil {
+		b, err := d.readByte()
+		if err != nil {
 			return err
+		}
+		switch b {
+		case 24, 25, 26, 27, 28, 29, 30, 31: // (reserved)
+			return errors.New("cbor: err") // TODO: introduce SyntaxError
 		}
 
 	// half-precision float (two-byte IEEE 754)
