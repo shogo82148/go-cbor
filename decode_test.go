@@ -284,6 +284,43 @@ var unmarshalTests = []struct {
 		ptr(math.Inf(-1)),
 	},
 	{
+		"false",
+		[]byte{0xf4},
+		new(bool),
+		ptr(false),
+	},
+	{
+		"true",
+		[]byte{0xf5},
+		new(bool),
+		ptr(true),
+	},
+	// TODO:
+	// {
+	// 	"null",
+	// 	[]byte{0xf6},
+	// 	new(*int64),
+	// 	ptr((*int64)(nil)),
+	// },
+	// {
+	// 	"undefined",
+	// 	[]byte{0xf7},
+	// 	new(any),
+	// 	ptr(any(Undefined)),
+	// },
+	// {
+	// 	"simple(16)",
+	// 	[]byte{0xf0},
+	// 	new(any),
+	// 	ptr(any(16)),
+	// },
+	// {
+	// 	"simple(255)",
+	// 	[]byte{0xf8, 0xff},
+	// 	new(any),
+	// 	ptr(any(255)),
+	// },
+	{
 		"zero-length byte string",
 		[]byte{0x40},
 		new([]byte),
@@ -332,18 +369,6 @@ var unmarshalTests = []struct {
 		ptr("\xf0\x90\x85\x91"),
 	},
 	{
-		"indefinite-length byte string",
-		[]byte{0x5f, 0x42, 0x01, 0x02, 0x43, 0x03, 0x4, 0x05, 0xff},
-		new([]byte),
-		ptr([]byte{0x01, 0x02, 0x03, 0x04, 0x05}),
-	},
-	{
-		"indefinite-length utf8 string",
-		[]byte{0x7f, 0x65, 0x73, 0x74, 0x72, 0x65, 0x61, 0x64, 0x6d, 0x69, 0x6e, 0x67, 0xff},
-		new(string),
-		ptr("streaming"),
-	},
-	{
 		"zero-length array",
 		[]byte{0x80},
 		new([]int64),
@@ -377,6 +402,54 @@ var unmarshalTests = []struct {
 		}),
 	},
 	{
+		"zero-length map",
+		[]byte{0xa0},
+		new(map[string]int64),
+		ptr(map[string]int64{}),
+	},
+	{
+		"map",
+		[]byte{0xa2, 0x01, 0x02, 0x03, 0x04},
+		new(map[int64]int64),
+		ptr(map[int64]int64{1: 2, 3: 4}),
+	},
+	{
+		"array in map",
+		[]byte{0xa2, 0x61, 0x61, 0x01, 0x61, 0x62, 0x82, 0x02, 0x03},
+		new(map[string]any),
+		ptr(map[string]any{"a": int64(1), "b": []any{int64(2), int64(3)}}),
+	},
+	{
+		"map in array",
+		[]byte{0x82, 0x61, 0x61, 0xa1, 0x61, 0x62, 0x61, 0x63},
+		new([]any),
+		ptr([]any{"a", map[string]any{"b": "c"}}),
+	},
+	{
+		"map abcde",
+		[]byte{0xa5, 0x61, 0x61, 0x61, 0x41, 0x61, 0x62, 0x61, 0x42, 0x61, 0x63, 0x61, 0x43, 0x61, 0x64, 0x61, 0x44, 0x61, 0x65, 0x61, 0x45},
+		new(map[string]string),
+		ptr(map[string]string{
+			"a": "A",
+			"b": "B",
+			"c": "C",
+			"d": "D",
+			"e": "E",
+		}),
+	},
+	{
+		"indefinite-length byte string",
+		[]byte{0x5f, 0x42, 0x01, 0x02, 0x43, 0x03, 0x4, 0x05, 0xff},
+		new([]byte),
+		ptr([]byte{0x01, 0x02, 0x03, 0x04, 0x05}),
+	},
+	{
+		"indefinite-length utf8 string",
+		[]byte{0x7f, 0x65, 0x73, 0x74, 0x72, 0x65, 0x61, 0x64, 0x6d, 0x69, 0x6e, 0x67, 0xff},
+		new(string),
+		ptr("streaming"),
+	},
+	{
 		"zero-length indefinite-length array",
 		[]byte{0x9f, 0xff},
 		new([]int64),
@@ -405,6 +478,32 @@ var unmarshalTests = []struct {
 		[]byte{0x83, 0x01, 0x9f, 0x02, 0x03, 0xff, 0x82, 0x04, 0x05},
 		new([]any),
 		ptr([]any{int64(1), []any{int64(2), int64(3)}, []any{int64(4), int64(5)}}),
+	},
+	{
+		"indefinite-length array 5",
+		[]byte{0x9f, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x18, 0x18, 0x19, 0xff},
+		new([]int),
+		ptr([]int{
+			1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+		}),
+	},
+	{
+		"array in indefinite-length map",
+		[]byte{0xbf, 0x61, 0x61, 0x01, 0x61, 0x62, 0x9f, 0x02, 0x03, 0xff, 0xff},
+		new(map[string]any),
+		ptr(map[string]any{"a": int64(1), "b": []any{int64(2), int64(3)}}),
+	},
+	{
+		"indefinite-length map in array",
+		[]byte{0x82, 0x61, 0x61, 0xbf, 0x61, 0x62, 0x61, 0x63, 0xff},
+		new([]any),
+		ptr([]any{"a", map[string]any{"b": "c"}}),
+	},
+	{
+		"indefinite-length map",
+		[]byte{0xbf, 0x63, 0x46, 0x75, 0x6e, 0xf5, 0x63, 0x41, 0x6d, 0x74, 0x21, 0xff},
+		new(map[string]any),
+		ptr(map[string]any{"Fun": true, "Amt": int64(-2)}),
 	},
 
 	// decode to any
