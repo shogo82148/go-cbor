@@ -208,7 +208,17 @@ func TestMarshal(t *testing.T) {
 			Undefined,
 			[]byte{0xf7},
 		},
-		// TODO: simple values
+		{
+			"simple value 16",
+			Simple(16),
+			[]byte{0xf0},
+		},
+		{
+			"simple value 255",
+			Simple(255),
+			[]byte{0xf8, 0xff},
+		},
+		// TODO: tags
 		{
 			"byte string",
 			[]byte(""),

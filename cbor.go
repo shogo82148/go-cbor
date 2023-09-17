@@ -74,3 +74,6 @@ func (i Integer) String() string {
 		return strconv.FormatUint(i.Value, 10)
 	}
 }
+
+// Simple is a CBOR simple type.
+type Simple byte
