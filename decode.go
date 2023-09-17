@@ -523,6 +523,18 @@ func (d *decodeState) decodeBytes(start int, n uint64, v reflect.Value) error {
 		}
 		s := slices.Clone(d.data[d.off : d.off+int(n)])
 		v.SetBytes(s)
+	case reflect.Interface:
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "bytes", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		if uint64(d.off)+n > uint64(len(d.data)) {
+			return d.newSyntaxError("cbor: unexpected end")
+		}
+		s := slices.Clone(d.data[d.off : d.off+int(n)])
+		v.Set(reflect.ValueOf(s))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "bytes", Type: v.Type(), Offset: int64(start)})
 	}
 	return nil
 }
@@ -604,6 +616,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+n > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (one-byte uint8_t for n, and then n bytes follow)
 	case 0x58:
@@ -614,6 +627,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (two-byte uint16_t for n, and then n bytes follow)
 	case 0x59:
@@ -624,6 +638,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (four-byte uint32_t for n, and then n bytes follow)
 	case 0x5a:
@@ -634,6 +649,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (eight-byte uint64_t for n, and then n bytes follow)
 	case 0x5b:
@@ -644,6 +660,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// byte string (indefinite length)
 	case 0x5f:
@@ -669,6 +686,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+n > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (one-byte uint8_t for n, and then n bytes follow)
 	case 0x78:
@@ -679,6 +697,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (two-byte uint16_t for n, and then n bytes follow)
 	case 0x79:
@@ -689,6 +708,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (four-byte uint32_t for n, and then n bytes follow)
 	case 0x7a:
@@ -699,6 +719,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (eight-byte uint64_t for n, and then n bytes follow)
 	case 0x7b:
@@ -709,6 +730,7 @@ func (d *decodeState) checkValid() error {
 		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (indefinite length)
 	case 0x7f:

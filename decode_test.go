@@ -281,6 +281,12 @@ var unmarshalTests = []struct {
 		new(any),
 		ptr(any(float64(0))),
 	},
+	{
+		"decode byte string to any",
+		[]byte{0x44, 0x01, 0x02, 0x03, 0x04},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
 
 	// Unmarshaler
 	{
