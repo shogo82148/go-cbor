@@ -876,8 +876,7 @@ func (d *decodeState) checkValid() error {
 		if err != nil {
 			return err
 		}
-		switch b {
-		case 24, 25, 26, 27, 28, 29, 30, 31: // (reserved)
+		if b < 0x20 {
 			return errors.New("cbor: err") // TODO: introduce SyntaxError
 		}
 
