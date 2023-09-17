@@ -3,10 +3,10 @@ package cbor
 import (
 	"encoding/binary"
 	"errors"
-	"io"
 	"math"
 	"math/bits"
 	"reflect"
+	"strconv"
 )
 
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
@@ -91,7 +91,7 @@ func (d *decodeState) init(data []byte) {
 
 func (s *decodeState) readByte() (byte, error) {
 	if s.off+1 > len(s.data) {
-		return 0, io.ErrUnexpectedEOF
+		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	b := s.data[s.off]
 	s.off++
@@ -100,14 +100,14 @@ func (s *decodeState) readByte() (byte, error) {
 
 func (s *decodeState) peekByte() (byte, error) {
 	if s.off+1 > len(s.data) {
-		return 0, io.ErrUnexpectedEOF
+		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	return s.data[s.off], nil
 }
 
 func (s *decodeState) readUint16() (uint16, error) {
 	if s.off+2 > len(s.data) {
-		return 0, io.ErrUnexpectedEOF
+		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	b := binary.BigEndian.Uint16(s.data[s.off:])
 	s.off += 2
@@ -116,7 +116,7 @@ func (s *decodeState) readUint16() (uint16, error) {
 
 func (s *decodeState) readUint32() (uint32, error) {
 	if s.off+4 > len(s.data) {
-		return 0, io.ErrUnexpectedEOF
+		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	b := binary.BigEndian.Uint32(s.data[s.off:])
 	s.off += 4
@@ -125,7 +125,7 @@ func (s *decodeState) readUint32() (uint32, error) {
 
 func (s *decodeState) readUint64() (uint64, error) {
 	if s.off+8 > len(s.data) {
-		return 0, io.ErrUnexpectedEOF
+		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	b := binary.BigEndian.Uint64(s.data[s.off:])
 	s.off += 8
@@ -541,7 +541,7 @@ func (d *decodeState) checkValid() error {
 	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
 		n := uint64(typ - 0x40)
 		if uint64(d.off)+n > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// byte string (one-byte uint8_t for n, and then n bytes follow)
@@ -551,7 +551,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// byte string (two-byte uint16_t for n, and then n bytes follow)
@@ -561,7 +561,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// byte string (four-byte uint32_t for n, and then n bytes follow)
@@ -571,7 +571,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// byte string (eight-byte uint64_t for n, and then n bytes follow)
@@ -581,7 +581,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// byte string (indefinite length)
@@ -606,7 +606,7 @@ func (d *decodeState) checkValid() error {
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
 		n := uint64(typ - 0x60)
 		if uint64(d.off)+n > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// text string (one-byte uint8_t for n, and then n bytes follow)
@@ -616,7 +616,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// text string (two-byte uint16_t for n, and then n bytes follow)
@@ -626,7 +626,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// text string (four-byte uint32_t for n, and then n bytes follow)
@@ -636,7 +636,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// text string (eight-byte uint64_t for n, and then n bytes follow)
@@ -646,7 +646,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
-			return io.ErrUnexpectedEOF
+			return d.newSyntaxError("cbor: unexpected end")
 		}
 
 	// text string (indefinite length)
@@ -877,7 +877,7 @@ func (d *decodeState) checkValid() error {
 			return err
 		}
 		if b < 0x20 {
-			return errors.New("cbor: err") // TODO: introduce SyntaxError
+			return d.newSyntaxError("cbor: invalid simple value")
 		}
 
 	// half-precision float (two-byte IEEE 754)
@@ -899,11 +899,24 @@ func (d *decodeState) checkValid() error {
 		}
 
 	default:
-		return errors.New("cbor: err") // TODO: introduce SyntaxError
+		return d.newSyntaxError("cbor: unknown initial byte: " + strconv.Itoa(int(typ)))
 	}
 
 	if d.off < len(d.data) {
-		return errors.New("cbor: err") // TODO: introduce SyntaxError
+		return d.newSyntaxError("cbor: trailing data")
 	}
 	return nil
+}
+
+// A SyntaxError is a description of a CBOR syntax error.
+// Unmarshal will return a SyntaxError if the CBOR can't be parsed.
+type SyntaxError struct {
+	msg    string // description of error
+	Offset int64  // error occurred after reading Offset bytes
+}
+
+func (e *SyntaxError) Error() string { return e.msg }
+
+func (d *decodeState) newSyntaxError(msg string) error {
+	return &SyntaxError{msg: msg, Offset: int64(d.off)}
 }
