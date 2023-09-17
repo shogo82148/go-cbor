@@ -1000,7 +1000,66 @@ func (d *decodeState) decodeMap(start int, n uint64, v reflect.Value) error {
 }
 
 func (d *decodeState) decodeMapIndefinite(start int, v reflect.Value) error {
-	return errors.New("TODO: implement indefinite map decoding")
+	switch v.Kind() {
+	case reflect.Map:
+		if v.IsNil() {
+			v.Set(reflect.MakeMapWithSize(v.Type(), 0))
+		}
+		kt := v.Type().Key()
+		et := v.Type().Elem()
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				d.off++
+				break
+			}
+
+			key := reflect.New(kt).Elem()
+			if err := d.decodeReflectValue(key); err != nil {
+				return err
+			}
+			elem := reflect.New(et).Elem()
+			if err := d.decodeReflectValue(elem); err != nil {
+				return err
+			}
+			v.SetMapIndex(key, elem)
+		}
+
+	case reflect.Interface:
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "map", Type: v.Type(), Offset: int64(start)})
+		}
+
+		m := map[string]any{}
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				d.off++
+				break
+			}
+
+			var key string
+			if err := d.decode(&key); err != nil {
+				return err
+			}
+			var elem any
+			if err := d.decode(&elem); err != nil {
+				return err
+			}
+			m[key] = elem
+		}
+		v.Set(reflect.ValueOf(m))
+
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "map", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
 }
 
 // Valid reports whether data is a valid CBOR encoding.
