@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -698,7 +699,51 @@ func (d *decodeState) decodeString(start int, n uint64) (string, error) {
 }
 
 func (d *decodeState) decodeStringIndefinite() (string, error) {
-	return "", errors.New("TODO: implement")
+	var buf strings.Builder
+	for {
+		var n uint64
+		typ, err := d.readByte()
+		if err != nil {
+			return "", err
+		}
+		switch {
+		case typ == 0xff:
+			return buf.String(), nil
+		case typ >= 0x60 && typ <= 0x77:
+			n = uint64(typ - 0x60)
+		case typ == 0x78:
+			m, err := d.readByte()
+			if err != nil {
+				return "", err
+			}
+			n = uint64(m)
+		case typ == 0x79:
+			m, err := d.readUint16()
+			if err != nil {
+				return "", err
+			}
+			n = uint64(m)
+		case typ == 0x7a:
+			m, err := d.readUint32()
+			if err != nil {
+				return "", err
+			}
+			n = uint64(m)
+		case typ == 0x7b:
+			m, err := d.readUint64()
+			if err != nil {
+				return "", err
+			}
+			n = m
+		default:
+			return "", d.newSyntaxError("cbor: invalid byte string chunk type")
+		}
+		if !d.isAvailable(n) {
+			return "", d.newSyntaxError("cbor: unexpected end")
+		}
+		buf.Write(d.data[d.off : d.off+int(n)])
+		d.off += int(n)
+	}
 }
 
 func (d *decodeState) setString(start int, s string, v reflect.Value) error {
