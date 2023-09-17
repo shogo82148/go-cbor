@@ -515,6 +515,47 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 	case 0x9f:
 		return d.decodeArrayIndefinite(start, v)
 
+	// map (0x00..0x17 pairs of data items follow)
+	case 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7:
+		n := int(typ - 0xa0)
+		return d.decodeMap(start, uint64(n), v)
+
+	// map (one-byte uint8_t for n, and then n pairs of data items follow)
+	case 0xb8:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		return d.decodeMap(start, uint64(n), v)
+
+	// map (two-byte uint16_t for n, and then n pairs of data items follow)
+	case 0xb9:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		return d.decodeMap(start, uint64(n), v)
+
+	// map (four-byte uint32_t for n, and then n pairs of data items follow)
+	case 0xba:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		return d.decodeMap(start, uint64(n), v)
+
+	// map (eight-byte uint64_t for n, and then n pairs of data items follow)
+	case 0xbb:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		return d.decodeMap(start, n, v)
+
+	// map (indefinite length)
+	case 0xbf:
+		return d.decodeMapIndefinite(start, v)
+
 	// half-precision float (two-byte IEEE 754)
 	case 0xf9:
 		w, err := d.readUint16()
@@ -751,7 +792,9 @@ func (d *decodeState) decodeString(start int, n uint64) (string, error) {
 		return "", d.newSyntaxError("cbor: unexpected end")
 	}
 	// UTF-8 validation is done by the checkValid method; wo don't need to do it here.
-	return string(d.data[d.off : d.off+int(n)]), nil
+	s := string(d.data[d.off : d.off+int(n)])
+	d.off += int(n)
+	return s, nil
 }
 
 func (d *decodeState) decodeStringIndefinite() (string, error) {
@@ -909,6 +952,55 @@ func (d *decodeState) decodeArrayIndefinite(start int, v reflect.Value) error {
 	}
 
 	return nil
+}
+
+func (d *decodeState) decodeMap(start int, n uint64, v reflect.Value) error {
+	switch v.Kind() {
+	case reflect.Map:
+		if v.IsNil() {
+			v.Set(reflect.MakeMapWithSize(v.Type(), int(n)))
+		}
+		kt := v.Type().Key()
+		et := v.Type().Elem()
+		for i := 0; i < int(n); i++ {
+			key := reflect.New(kt).Elem()
+			if err := d.decodeReflectValue(key); err != nil {
+				return err
+			}
+			elem := reflect.New(et).Elem()
+			if err := d.decodeReflectValue(elem); err != nil {
+				return err
+			}
+			v.SetMapIndex(key, elem)
+		}
+
+	case reflect.Interface:
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "map", Type: v.Type(), Offset: int64(start)})
+		}
+
+		m := map[string]any{}
+		for i := 0; i < int(n); i++ {
+			var key string
+			if err := d.decode(&key); err != nil {
+				return err
+			}
+			var elem any
+			if err := d.decode(&elem); err != nil {
+				return err
+			}
+			m[key] = elem
+		}
+		v.Set(reflect.ValueOf(m))
+
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "map", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
+}
+
+func (d *decodeState) decodeMapIndefinite(start int, v reflect.Value) error {
+	return errors.New("TODO: implement indefinite map decoding")
 }
 
 // Valid reports whether data is a valid CBOR encoding.
