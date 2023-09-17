@@ -91,7 +91,7 @@ func (d *decodeState) init(data []byte) {
 }
 
 func (s *decodeState) readByte() (byte, error) {
-	if s.off+1 > len(s.data) {
+	if !s.isAvailable(1) {
 		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	b := s.data[s.off]
@@ -100,14 +100,14 @@ func (s *decodeState) readByte() (byte, error) {
 }
 
 func (s *decodeState) peekByte() (byte, error) {
-	if s.off+1 > len(s.data) {
+	if !s.isAvailable(1) {
 		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	return s.data[s.off], nil
 }
 
 func (s *decodeState) readUint16() (uint16, error) {
-	if s.off+2 > len(s.data) {
+	if !s.isAvailable(2) {
 		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	b := binary.BigEndian.Uint16(s.data[s.off:])
@@ -116,7 +116,7 @@ func (s *decodeState) readUint16() (uint16, error) {
 }
 
 func (s *decodeState) readUint32() (uint32, error) {
-	if s.off+4 > len(s.data) {
+	if !s.isAvailable(4) {
 		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	b := binary.BigEndian.Uint32(s.data[s.off:])
@@ -125,12 +125,26 @@ func (s *decodeState) readUint32() (uint32, error) {
 }
 
 func (s *decodeState) readUint64() (uint64, error) {
-	if s.off+8 > len(s.data) {
+	if !s.isAvailable(8) {
 		return 0, s.newSyntaxError("cbor: unexpected end")
 	}
 	b := binary.BigEndian.Uint64(s.data[s.off:])
 	s.off += 8
 	return b, nil
+}
+
+// isAvailable reports whether n bytes are available.
+func (s *decodeState) isAvailable(n uint64) bool {
+	if n >= math.MaxInt {
+		// int(n) will overflow
+		return false
+	}
+	newOffset := s.off + int(n)
+	if newOffset < s.off {
+		// overflow
+		return false
+	}
+	return newOffset <= len(s.data)
 }
 
 func (s *decodeState) saveError(err error) {
@@ -536,7 +550,7 @@ func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
 }
 
 func (d *decodeState) decodeBytes(start int, n uint64) ([]byte, error) {
-	if uint64(d.off)+n > uint64(len(d.data)) {
+	if !d.isAvailable(n) {
 		return nil, d.newSyntaxError("cbor: unexpected end")
 	}
 	return slices.Clone(d.data[d.off : d.off+int(n)]), nil
@@ -582,7 +596,7 @@ func (d *decodeState) decodeBytesIndefinite() ([]byte, error) {
 		default:
 			return nil, d.newSyntaxError("cbor: invalid byte string chunk type")
 		}
-		if uint64(d.off)+n > uint64(len(d.data)) {
+		if !d.isAvailable(n) {
 			return nil, d.newSyntaxError("cbor: unexpected end")
 		}
 		s = append(s, d.data[d.off:d.off+int(n)]...)
@@ -701,7 +715,7 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+		if !d.isAvailable(uint64(n)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
 		d.off += int(n)
@@ -712,7 +726,7 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+		if !d.isAvailable(uint64(n)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
 		d.off += int(n)
@@ -723,7 +737,7 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+		if !d.isAvailable(uint64(n)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
 		d.off += int(n)
@@ -734,7 +748,7 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
+		if !d.isAvailable(uint64(n)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
 		d.off += int(n)
@@ -760,8 +774,8 @@ func (d *decodeState) checkValidChild() error {
 
 	// text string (0x00..0x17 bytes follow)
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
-		n := uint64(typ - 0x60)
-		if uint64(d.off)+n > uint64(len(d.data)) {
+		n := int(typ - 0x60)
+		if !d.isAvailable(uint64(n)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
 		d.off += int(n)
@@ -772,7 +786,7 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+		if !d.isAvailable(uint64(n)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
 		d.off += int(n)
@@ -783,7 +797,7 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+		if !d.isAvailable(uint64(n)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
 		d.off += int(n)
@@ -794,7 +808,7 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if uint64(d.off)+uint64(n) > uint64(len(d.data)) {
+		if !d.isAvailable(uint64(n)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
 		d.off += int(n)
@@ -805,7 +819,7 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if uint64(d.off)+n < n || uint64(d.off)+n > uint64(len(d.data)) {
+		if !d.isAvailable(uint64(n)) {
 			return d.newSyntaxError("cbor: unexpected end")
 		}
 		d.off += int(n)
