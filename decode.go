@@ -959,21 +959,12 @@ func (d *decodeState) checkValidChild() error {
 
 	// text string (indefinite length)
 	case 0x7f:
-		for {
-			typ, err := d.peekByte()
-			if err != nil {
-				return err
-			}
-			if typ == 0xff {
-				d.off++
-				break
-			}
-			if typ < 0x60 || typ > 0x7b {
-				return errors.New("cbor: invalid byte string")
-			}
-			if err := d.checkValidChild(); err != nil {
-				return err
-			}
+		s, err := d.decodeStringIndefinite()
+		if err != nil {
+			return err
+		}
+		if !utf8.ValidString(s) {
+			d.saveError(d.newSyntaxError("cbor: invalid UTF-8 string"))
 		}
 
 	// array (0x00..0x17 data items follow)
