@@ -213,10 +213,10 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 	case l < 0x100:
 		e.writeByte(0x98)
 		e.writeByte(byte(l))
-	case l < 0x10000:
+	case int64(l) < 0x10000:
 		e.writeByte(0x99)
 		e.writeUint16(uint16(l))
-	case l < 0x100000000:
+	case int64(l) < 0x100000000:
 		e.writeByte(0x9a)
 		e.writeUint32(uint32(l))
 	default:
