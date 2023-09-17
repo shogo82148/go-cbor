@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"unicode/utf8"
 )
 
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
@@ -404,6 +405,71 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.setBytes(start, data, v)
 
+	// UTF-8 string (0x00..0x17 bytes follow)
+	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
+		n := uint64(typ - 0x60)
+		data, err := d.decodeString(start, n)
+		if err != nil {
+			return err
+		}
+		return d.setString(start, data, v)
+
+	// UTF-8 string (one-byte uint8_t for n, and then n bytes follow)
+	case 0x78:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		data, err := d.decodeString(start, uint64(n))
+		if err != nil {
+			return err
+		}
+		return d.setString(start, data, v)
+
+	// UTF-8 string (two-byte uint16_t for n, and then n bytes follow)
+	case 0x79:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		data, err := d.decodeString(start, uint64(n))
+		if err != nil {
+			return err
+		}
+		return d.setString(start, data, v)
+
+	// UTF-8 string (four-byte uint32_t for n, and then n bytes follow)
+	case 0x7a:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		data, err := d.decodeString(start, uint64(n))
+		if err != nil {
+			return err
+		}
+		return d.setString(start, data, v)
+
+	// UTF-8 string (eight-byte uint64_t for n, and then n bytes follow)
+	case 0x7b:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		data, err := d.decodeString(start, n)
+		if err != nil {
+			return err
+		}
+		return d.setString(start, data, v)
+
+	// UTF-8 string (indefinite length)
+	case 0x7f:
+		data, err := d.decodeStringIndefinite()
+		if err != nil {
+			return err
+		}
+		return d.setString(start, data, v)
+
 	// half-precision float (two-byte IEEE 754)
 	case 0xf9:
 		w, err := d.readUint16()
@@ -467,7 +533,6 @@ func (d *decodeState) decodePositiveInt(start int, w uint64, v reflect.Value) er
 }
 
 func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) error {
-	_, v = indirect(v, false)
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i := int64(^w)
@@ -624,6 +689,34 @@ func (d *decodeState) setBytes(start int, data []byte, v reflect.Value) error {
 	return nil
 }
 
+func (d *decodeState) decodeString(start int, n uint64) (string, error) {
+	if !d.isAvailable(n) {
+		return "", d.newSyntaxError("cbor: unexpected end")
+	}
+	// UTF-8 validation is done by the checkValid method; wo don't need to do it here.
+	return string(d.data[d.off : d.off+int(n)]), nil
+}
+
+func (d *decodeState) decodeStringIndefinite() (string, error) {
+	return "", errors.New("TODO: implement")
+}
+
+func (d *decodeState) setString(start int, s string, v reflect.Value) error {
+	switch v.Kind() {
+	case reflect.String:
+		v.SetString(s)
+	case reflect.Interface:
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "string", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		v.Set(reflect.ValueOf(s))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "string", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
+}
+
 // Valid reports whether data is a valid CBOR encoding.
 func Valid(data []byte) bool {
 	d := newDecodeState(data)
@@ -775,10 +868,9 @@ func (d *decodeState) checkValidChild() error {
 	// text string (0x00..0x17 bytes follow)
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
 		n := int(typ - 0x60)
-		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+		if err := d.checkValidString(uint64(n)); err != nil {
+			return err
 		}
-		d.off += int(n)
 
 	// text string (one-byte uint8_t for n, and then n bytes follow)
 	case 0x78:
@@ -786,10 +878,9 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+		if err := d.checkValidString(uint64(n)); err != nil {
+			return err
 		}
-		d.off += int(n)
 
 	// text string (two-byte uint16_t for n, and then n bytes follow)
 	case 0x79:
@@ -797,10 +888,9 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+		if err := d.checkValidString(uint64(n)); err != nil {
+			return err
 		}
-		d.off += int(n)
 
 	// text string (four-byte uint32_t for n, and then n bytes follow)
 	case 0x7a:
@@ -808,10 +898,9 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+		if err := d.checkValidString(uint64(n)); err != nil {
+			return err
 		}
-		d.off += int(n)
 
 	// text string (eight-byte uint64_t for n, and then n bytes follow)
 	case 0x7b:
@@ -819,10 +908,9 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+		if err := d.checkValidString(uint64(n)); err != nil {
+			return err
 		}
-		d.off += int(n)
 
 	// text string (indefinite length)
 	case 0x7f:
@@ -1080,6 +1168,17 @@ func (d *decodeState) checkValidChild() error {
 		return d.newSyntaxError("cbor: unknown initial byte: " + strconv.Itoa(int(typ)))
 	}
 
+	return nil
+}
+
+func (d *decodeState) checkValidString(n uint64) error {
+	if !d.isAvailable(n) {
+		return d.newSyntaxError("cbor: unexpected end")
+	}
+	if !utf8.Valid(d.data[d.off : d.off+int(n)]) {
+		d.saveError(d.newSyntaxError("cbor: invalid UTF-8 string"))
+	}
+	d.off += int(n)
 	return nil
 }
 
