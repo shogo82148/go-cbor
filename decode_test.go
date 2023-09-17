@@ -352,6 +352,12 @@ var unmarshalTests = []struct {
 		new(any),
 		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
 	},
+	{
+		"decode utf8 string to any",
+		[]byte{0x64, 0x49, 0x45, 0x54, 0x46},
+		new(any),
+		ptr(any("IETF")),
+	},
 
 	// Unmarshaler
 	{
