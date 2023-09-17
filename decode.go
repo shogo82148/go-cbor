@@ -13,6 +13,7 @@ import (
 )
 
 var integerType = reflect.TypeOf(Integer{})
+var anySlice = reflect.TypeOf([]any(nil))
 
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
 // The input can be assumed to be a valid encoding of a CBOR value.
@@ -473,6 +474,47 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.setString(start, data, v)
 
+		// array (0x00..0x17 data items follow)
+	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97:
+		n := int(typ - 0x80)
+		return d.decodeArray(start, uint64(n), v)
+
+	// array (one-byte uint8_t for n, and then n data items follow)
+	case 0x98:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		return d.decodeArray(start, uint64(n), v)
+
+	// array (two-byte uint16_t for n, and then n data items follow)
+	case 0x99:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		return d.decodeArray(start, uint64(n), v)
+
+	// array (four-byte uint32_t for n, and then n data items follow)
+	case 0x9a:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		return d.decodeArray(start, uint64(n), v)
+
+	// array (eight-byte uint64_t for n, and then n data items follow)
+	case 0x9b:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		return d.decodeArray(start, n, v)
+
+	// array (indefinite length)
+	case 0x9f:
+		return d.decodeArrayIndefinite(start, v)
+
 	// half-precision float (two-byte IEEE 754)
 	case 0xf9:
 		w, err := d.readUint16()
@@ -774,6 +816,39 @@ func (d *decodeState) setString(start int, s string, v reflect.Value) error {
 		d.saveError(&UnmarshalTypeError{Value: "string", Type: v.Type(), Offset: int64(start)})
 	}
 	return nil
+}
+
+func (d *decodeState) decodeArray(start int, n uint64, v reflect.Value) error {
+	switch v.Kind() {
+	case reflect.Slice:
+		if c := uint64(v.Cap()); c < n || (c == 0 && n == 0) {
+			v.Set(reflect.MakeSlice(v.Type(), int(n), int(n)))
+		}
+		v.SetLen(int(n))
+		for i := 0; i < int(n); i++ {
+			if err := d.decodeReflectValue(v.Index(i)); err != nil {
+				return err
+			}
+		}
+	case reflect.Interface:
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
+		}
+		w := reflect.MakeSlice(anySlice, int(n), int(n))
+		v.Set(w)
+		for i := 0; i < int(n); i++ {
+			if err := d.decodeReflectValue(w.Index(i)); err != nil {
+				return err
+			}
+		}
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
+}
+
+func (d *decodeState) decodeArrayIndefinite(start int, v reflect.Value) error {
+	return errors.New("TODO: implement")
 }
 
 // Valid reports whether data is a valid CBOR encoding.
