@@ -13,7 +13,8 @@ import (
 )
 
 var integerType = reflect.TypeOf(Integer{})
-var anySlice = reflect.TypeOf([]any(nil))
+var anySliceType = reflect.TypeOf([]any(nil))
+var simpleType = reflect.TypeOf(Simple(0))
 
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
 // The input can be assumed to be a valid encoding of a CBOR value.
@@ -556,6 +557,13 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 	case 0xbf:
 		return d.decodeMapIndefinite(start, v)
 
+	// simple values
+	case 0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xf0, 0xf3:
+		if u != nil {
+			return u.UnmarshalCBOR(d.data[start:d.off])
+		}
+		return d.setSimple(start, Simple(typ-0xe0), v)
+
 	// false
 	case 0xf4:
 		if u != nil {
@@ -583,6 +591,17 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 			return u.UnmarshalCBOR(d.data[start:d.off])
 		}
 		return d.setUndefined(start, v)
+
+	// simple value (one-byte uint8_t follows)
+	case 0xf8:
+		if u != nil {
+			return u.UnmarshalCBOR(d.data[start:d.off])
+		}
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		return d.setSimple(start, Simple(n), v)
 
 	// half-precision float (two-byte IEEE 754)
 	case 0xf9:
@@ -905,7 +924,7 @@ func (d *decodeState) decodeArray(start int, n uint64, v reflect.Value) error {
 		if v.NumMethod() != 0 {
 			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
 		}
-		s := reflect.MakeSlice(anySlice, int(n), int(n))
+		s := reflect.MakeSlice(anySliceType, int(n), int(n))
 		v.Set(s)
 		for i := 0; i < int(n); i++ {
 			if err := d.decodeReflectValue(s.Index(i)); err != nil {
@@ -1086,6 +1105,25 @@ func (d *decodeState) decodeMapIndefinite(start int, v reflect.Value) error {
 
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "map", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
+}
+
+func (d *decodeState) setSimple(start int, s Simple, v reflect.Value) error {
+	t := v.Type()
+	if t == simpleType {
+		v.Set(reflect.ValueOf(s))
+		return nil
+	}
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "simple", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		v.Set(reflect.ValueOf(s))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "simple", Type: v.Type(), Offset: int64(start)})
 	}
 	return nil
 }
@@ -1525,6 +1563,9 @@ func (d *decodeState) checkValidChild() error {
 	// bigfloat (data item "array" follows)
 	case 0xc5:
 		// TODO: check that the array is a valid bigfloat
+
+	// simple values
+	case 0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xf0, 0xf3:
 
 	// false
 	case 0xf4:
