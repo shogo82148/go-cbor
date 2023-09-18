@@ -559,10 +559,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		switch v.Type() {
-		case timeType:
-			v.Set(reflect.ValueOf(t))
-		}
+		return d.setAny(start, "time", t, v)
 
 	// tag 1: Epoch-based date/time
 	case 0xc1:
@@ -583,11 +580,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 			i, f := math.Modf(epoch)
 			t = time.Unix(int64(i), int64(f*1e9))
 		}
-
-		switch v.Type() {
-		case timeType:
-			v.Set(reflect.ValueOf(t))
-		}
+		return d.setAny(start, "time", t, v)
 
 	// tag 2: Unsigned bignum
 	case 0xc2:
@@ -731,6 +724,20 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.decodeFloat64(start, uint64(w), v)
 	}
+	return nil
+}
+
+func (d *decodeState) setAny(start int, value string, w any, v reflect.Value) error {
+	rw := reflect.ValueOf(w)
+	if rw.Type() == v.Type() {
+		v.Set(rw)
+		return nil
+	}
+	if v.Kind() == reflect.Interface && rw.Type().Implements(v.Type()) {
+		v.Set(rw)
+		return nil
+	}
+	d.saveError(&UnmarshalTypeError{Value: value, Type: v.Type(), Offset: int64(start)})
 	return nil
 }
 

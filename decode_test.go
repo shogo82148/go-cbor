@@ -760,6 +760,40 @@ func TestUnmarshal_Time(t *testing.T) {
 		}
 	})
 
+	t.Run("rfc3339 to any", func(t *testing.T) {
+		input := []byte{0xc0, 0x74, 0x32, 0x30, 0x31, 0x33, 0x2d, 0x30, 0x33, 0x2d, 0x32, 0x31, 0x54, 0x32, 0x30, 0x3a, 0x30, 0x34, 0x3a, 0x30, 0x30, 0x5a}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		tt, ok := got.(time.Time)
+		if !ok {
+			t.Fatal("got is not a time.Time")
+		}
+		want := time.Date(2013, 3, 21, 20, 4, 0, 0, time.UTC)
+		if !tt.Equal(want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("rfc3339 to interface", func(t *testing.T) {
+		input := []byte{0xc0, 0x74, 0x32, 0x30, 0x31, 0x33, 0x2d, 0x30, 0x33, 0x2d, 0x32, 0x31, 0x54, 0x32, 0x30, 0x3a, 0x30, 0x34, 0x3a, 0x30, 0x30, 0x5a}
+		var got interface {
+			Unix() int64
+		}
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		tt, ok := got.(time.Time)
+		if !ok {
+			t.Fatal("got is not a time.Time")
+		}
+		want := time.Date(2013, 3, 21, 20, 4, 0, 0, time.UTC)
+		if !tt.Equal(want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
 	t.Run("integer epoch", func(t *testing.T) {
 		input := []byte{0xc1, 0x1a, 0x51, 0x4b, 0x67, 0xb0}
 		var got time.Time
