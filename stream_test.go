@@ -41,3 +41,22 @@ func TestEncoder(t *testing.T) {
 		}
 	}
 }
+
+func TestDecoder(t *testing.T) {
+	for i := 0; i < len(streamEncoded); i++ {
+		r := bytes.NewReader(streamEncoded[i])
+
+		dec := NewDecoder(r)
+		ret := []any{}
+		for {
+			var v any
+			if err := dec.Decode(&v); err != nil {
+				break
+			}
+			ret = append(ret, v)
+		}
+		if diff := cmp.Diff(streamTest[:i+1], ret); diff != "" {
+			t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
+		}
+	}
+}
