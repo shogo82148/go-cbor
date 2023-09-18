@@ -62,18 +62,56 @@ func TestDecoder(t *testing.T) {
 }
 
 func TestDecoder_UserAnyKey(t *testing.T) {
-	input := []byte{0xa2, 0x01, 0x02, 0x03, 0x04}
-	want := map[any]any{int64(1): int64(2), int64(3): int64(4)}
+	t.Run("number key", func(t *testing.T) {
+		input := []byte{0xa2, 0x01, 0x02, 0x03, 0x04}
+		want := map[any]any{int64(1): int64(2), int64(3): int64(4)}
 
-	r := bytes.NewReader(input)
-	dec := NewDecoder(r)
-	dec.d.useAnyKey = true
-	var got any
-	if err := dec.Decode(&got); err != nil {
-		t.Fatal(err)
-	}
+		r := bytes.NewReader(input)
+		dec := NewDecoder(r)
+		dec.d.useAnyKey = true
+		var got any
+		if err := dec.Decode(&got); err != nil {
+			t.Fatal(err)
+		}
 
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
-	}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("various type keys", func(t *testing.T) {
+		input := []byte{
+			0xa8,       // 8 items map
+			0x0a, 0x01, // 10
+			0x18, 0x64, 0x02, // 100
+			0x20, 0x03, // -1
+			0x61, 0x7a, 0x04, // "z"
+			0x62, 0x61, 0x61, 0x05, // "aa"
+			0x81, 0x18, 0x64, 0x06, // [100]
+			0x81, 0x20, 0x07, // [-1]
+			0xf4, 0x08, // false
+		}
+		want := map[any]any{
+			10:          1,
+			100:         2,
+			-1:          3,
+			"z":         4,
+			"aa":        5,
+			[1]int{100}: 6,
+			[1]int{-1}:  7,
+			false:       8,
+		}
+
+		r := bytes.NewReader(input)
+		dec := NewDecoder(r)
+		dec.d.useAnyKey = true
+		var got any
+		if err := dec.Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
+		}
+	})
 }
