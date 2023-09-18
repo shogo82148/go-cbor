@@ -36,9 +36,6 @@ func FuzzUnmarshal(f *testing.F) {
 		if !deepEqualLite(v, w) {
 			t.Errorf("Unmarshal() mismatch: %#v != %#v", v, w)
 		}
-		// if diff := cmp.Diff(v, w, cmpopts.EquateNaNs()); diff != "" {
-		// 	t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
-		// }
 
 		c, err := Marshal(w)
 		if err != nil {
