@@ -170,6 +170,10 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return mapEncoder
 	case reflect.Interface:
 		return interfaceEncoder
+	case reflect.Ptr:
+		return newPtrEncoder(t)
+	case reflect.Struct:
+		return newStructEncoder(t)
 	}
 	panic("TODO implement")
 }
@@ -297,6 +301,61 @@ func interfaceEncoder(s *encodeState, v reflect.Value) error {
 		return s.encodeNull()
 	}
 	return s.encodeReflectValue(v.Elem())
+}
+
+type ptrEncoder struct {
+	elemEnc encoderFunc
+}
+
+func (pe ptrEncoder) encode(e *encodeState, v reflect.Value) error {
+	if v.IsNil() {
+		return e.encodeNull()
+	}
+	// TODO: check for circular references
+	return pe.elemEnc(e, v.Elem())
+}
+
+func newPtrEncoder(t reflect.Type) encoderFunc {
+	enc := ptrEncoder{typeEncoder(t.Elem())}
+	return enc.encode
+}
+
+type structEncoder struct {
+	fields []field
+}
+
+type field struct {
+	name  string
+	index []int
+}
+
+func (se structEncoder) encode(e *encodeState, v reflect.Value) error {
+	e.writeUint(majorTypeMap, uint64(len(se.fields)))
+	for _, f := range se.fields {
+		fv := v.FieldByIndex(f.index)
+		if err := e.encode(f.name); err != nil {
+			return err
+		}
+		if err := e.encodeReflectValue(fv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func newStructEncoder(t reflect.Type) encoderFunc {
+	fields := []field{}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		fields = append(fields, field{
+			name:  f.Name,
+			index: f.Index,
+		})
+	}
+	se := structEncoder{
+		fields: fields,
+	}
+	return se.encode
 }
 
 func (s *encodeState) writeByte(v byte) {

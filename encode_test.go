@@ -15,6 +15,11 @@ func newBigInt(s string) *big.Int {
 	return i
 }
 
+type FooA struct {
+	A int
+	B string
+}
+
 func TestMarshal(t *testing.T) {
 	tests := []struct {
 		name string
@@ -464,6 +469,13 @@ func TestMarshal(t *testing.T) {
 				0x81, 0x20, 0x07, // [-1]
 				0xf4, 0x08, // false
 			},
+		},
+
+		// struct
+		{
+			"struct",
+			&FooA{A: 1, B: "2"},
+			[]byte{0xa2, 0x61, 0x41, 0x01, 0x61, 0x42, 0x61, 0x32},
 		},
 	}
 	for _, tt := range tests {
