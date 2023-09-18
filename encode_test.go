@@ -3,13 +3,16 @@ package cbor
 import (
 	"bytes"
 	"math"
+	"math/big"
 	"testing"
 )
 
-type customMarshaler struct{}
-
-func (m customMarshaler) MarshalCBOR() ([]byte, error) {
-	return []byte{0x01}, nil
+func newBigInt(s string) *big.Int {
+	i := new(big.Int)
+	if _, ok := i.SetString(s, 0); !ok {
+		panic("failed to parse big.Int: " + s)
+	}
+	return i
 }
 
 func TestMarshal(t *testing.T) {
@@ -66,7 +69,7 @@ func TestMarshal(t *testing.T) {
 		},
 		{
 			"1_000_000_000_000",
-			int(1_000_000_000_000),
+			int64(1_000_000_000_000),
 			[]byte{0x1b, 0x00, 0x00, 0x00, 0xe8, 0xd4, 0xa5, 0x10, 0x00},
 		},
 		{
@@ -74,9 +77,21 @@ func TestMarshal(t *testing.T) {
 			uint64(18446744073709551615),
 			[]byte{0x1b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 		},
-		// TODO: 18446744073709551616
-		// TODO: -18446744073709551616
-		// TODO: -18446744073709551617
+		{
+			"bigint: 18446744073709551616",
+			newBigInt("18446744073709551616"),
+			[]byte{0xc2, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			"-18446744073709551616",
+			Integer{Sign: true, Value: 18446744073709551615},
+			[]byte{0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		},
+		{
+			"bigint: -18446744073709551617",
+			newBigInt("-18446744073709551617"),
+			[]byte{0xc3, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
 		{
 			"negative one",
 			int(-1),
@@ -197,10 +212,67 @@ func TestMarshal(t *testing.T) {
 			Undefined,
 			[]byte{0xf7},
 		},
-		// TODO: simple values
+		{
+			"simple value 16",
+			Simple(16),
+			[]byte{0xf0},
+		},
+		{
+			"simple value 255",
+			Simple(255),
+			[]byte{0xf8, 0xff},
+		},
+		{
+			"tag 0",
+			Tag{
+				Number:  0,
+				Content: "2013-03-21T20:04:00Z",
+			},
+			[]byte{0xc0, 0x74, 0x32, 0x30, 0x31, 0x33, 0x2d, 0x30, 0x33, 0x2d, 0x32, 0x31, 0x54, 0x32, 0x30, 0x3a, 0x30, 0x34, 0x3a, 0x30, 0x30, 0x5a},
+		},
+		{
+			"tag 1 integer",
+			Tag{
+				Number:  1,
+				Content: int64(1363896240),
+			},
+			[]byte{0xc1, 0x1a, 0x51, 0x4b, 0x67, 0xb0},
+		},
+		{
+			"tag 1 float",
+			Tag{
+				Number:  1,
+				Content: float64(1363896240.5),
+			},
+			[]byte{0xc1, 0xfb, 0x41, 0xd4, 0x52, 0xd9, 0xec, 0x20, 0x00, 0x00},
+		},
+		{
+			"tag 23",
+			Tag{
+				Number:  23,
+				Content: []byte{0x01, 0x02, 0x03, 0x04},
+			},
+			[]byte{0xd7, 0x44, 0x01, 0x02, 0x03, 0x04},
+		},
+		{
+			"tag 24",
+			Tag{
+				Number:  24,
+				Content: []byte{0x64, 0x49, 0x45, 0x54, 0x46},
+			},
+			[]byte{0xd8, 0x18, 0x45, 0x64, 0x49, 0x45, 0x54, 0x46},
+		},
+		{
+			"tag 32",
+			Tag{
+				Number:  32,
+				Content: "http://www.example.com",
+			},
+			[]byte{0xd8, 0x20, 0x76, 0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f, 0x77, 0x77, 0x77, 0x2e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d},
+		},
 		{
 			"byte string",
-			[]byte(""),
+			[]byte{},
 			[]byte{0x40},
 		},
 		{
@@ -261,6 +333,45 @@ func TestMarshal(t *testing.T) {
 				0x17, 0x18, 0x18, 0x18, 0x19,
 			},
 		},
+		{
+			"empty map",
+			map[string]any{},
+			[]byte{0xa0},
+		},
+		{
+			"map",
+			map[int]int{
+				1: 2,
+				3: 4,
+			},
+			[]byte{0xa2, 0x01, 0x02, 0x03, 0x04},
+		},
+		{
+			"map: {\"a\": 1, \"b\": [2, 3]}",
+			map[string]any{
+				"a": 1,
+				"b": []int{2, 3},
+			},
+			[]byte{0xa2, 0x61, 0x61, 0x01, 0x61, 0x62, 0x82, 0x02, 0x03},
+		},
+		{
+			"map abcde",
+			map[string]string{
+				"a": "A",
+				"b": "B",
+				"c": "C",
+				"d": "D",
+				"e": "E",
+			},
+			[]byte{
+				0xa5,
+				0x61, 0x61, 0x61, 0x41,
+				0x61, 0x62, 0x61, 0x42,
+				0x61, 0x63, 0x61, 0x43,
+				0x61, 0x64, 0x61, 0x44,
+				0x61, 0x65, 0x61, 0x45,
+			},
+		},
 
 		// integer types
 		{
@@ -318,6 +429,11 @@ func TestMarshal(t *testing.T) {
 			uint(0),
 			[]byte{0x00},
 		},
+		{
+			"Integer",
+			Integer{Sign: false, Value: 0},
+			[]byte{0x00},
+		},
 
 		// float
 		{
@@ -328,9 +444,65 @@ func TestMarshal(t *testing.T) {
 
 		// marshaler
 		{
-			"custom marshaler",
-			customMarshaler{},
+			"marshaler",
+			RawMessage{0x01},
 			[]byte{0x01},
+		},
+
+		// map key sort order
+		{
+			"RFC 8949 Section 4.2.1",
+			map[any]any{
+				10:          1,
+				100:         2,
+				-1:          3,
+				"z":         4,
+				"aa":        5,
+				[1]int{100}: 6,
+				[1]int{-1}:  7,
+				false:       8,
+			},
+			[]byte{
+				0xa8,       // 8 items map
+				0x0a, 0x01, // 10
+				0x18, 0x64, 0x02, // 100
+				0x20, 0x03, // -1
+				0x61, 0x7a, 0x04, // "z"
+				0x62, 0x61, 0x61, 0x05, // "aa"
+				0x81, 0x18, 0x64, 0x06, // [100]
+				0x81, 0x20, 0x07, // [-1]
+				0xf4, 0x08, // false
+			},
+		},
+
+		{
+			"simple value in map",
+			map[string]any{
+				"0": Simple(2),
+			},
+			[]byte{0xa1, 0x61, 0x30, 0xe2},
+		},
+
+		// struct
+		{
+			"struct a",
+			&FooA{A: 1, B: "2"},
+			[]byte{0xa2, 0x61, 0x41, 0x01, 0x61, 0x42, 0x61, 0x32},
+		},
+		{
+			"struct b",
+			&FooB{Alg: 42, Kit: []byte("kit")},
+			[]byte{0xa2, 0x01, 0x18, 0x2a, 0x04, 0x43, 0x6b, 0x69, 0x74},
+		},
+		{
+			"struct b, omitempty",
+			&FooB{Alg: 42},
+			[]byte{0xa1, 0x01, 0x18, 0x2a},
+		},
+		{
+			"struct c",
+			&FooC{A: 1, B: "2"},
+			[]byte{0x82, 0x01, 0x61, 0x32},
 		},
 	}
 	for _, tt := range tests {
@@ -344,5 +516,19 @@ func TestMarshal(t *testing.T) {
 				t.Errorf("Marshal() got = %x, want %x", got, tt.want)
 			}
 		})
+	}
+}
+
+func BenchmarkMarshal_Uint64(b *testing.B) {
+	r := newXorshift64()
+	for i := 0; i < b.N; i++ {
+		Marshal(r.Uint64())
+	}
+}
+
+func BenchmarkMarshal_Int64(b *testing.B) {
+	r := newXorshift64()
+	for i := 0; i < b.N; i++ {
+		Marshal(int64(r.Uint64()))
 	}
 }

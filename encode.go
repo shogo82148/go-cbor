@@ -3,9 +3,30 @@ package cbor
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"math"
+	"math/big"
 	"reflect"
+	"slices"
 	"sync"
+)
+
+type CBORMarshaler interface {
+	// MarshalCBOR returns the CBOR encoding of the receiver.
+	MarshalCBOR() ([]byte, error)
+}
+
+type majorType byte
+
+const (
+	majorTypePositiveInt majorType = 0
+	majorTypeNegativeInt majorType = 1
+	majorTypeBytes       majorType = 2
+	majorTypeString      majorType = 3
+	majorTypeArray       majorType = 4
+	majorTypeMap         majorType = 5
+	majorTypeTag         majorType = 6
+	majorTypeOther       majorType = 7
 )
 
 func Marshal(v any) ([]byte, error) {
@@ -58,8 +79,6 @@ func (s *encodeState) encode(v any) error {
 		return s.encodeBool(v)
 	case nil:
 		return s.encodeNull()
-	case undefined:
-		return s.encodeUndefined()
 	case []byte:
 		return s.encodeBytes(v)
 	case string:
@@ -81,6 +100,24 @@ func (s *encodeState) encodeReflectValue(v reflect.Value) error {
 		return s.encodeNull()
 	}
 	return typeEncoder(v.Type())(s, v)
+}
+
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Pointer:
+		return v.IsNil()
+	}
+	return false
 }
 
 type encoderFunc func(e *encodeState, v reflect.Value) error
@@ -115,7 +152,22 @@ func typeEncoder(t reflect.Type) encoderFunc {
 	return f
 }
 
+var bigIntType = reflect.TypeOf((*big.Int)(nil))
+
 func newTypeEncoder(t reflect.Type) encoderFunc {
+	switch t {
+	case bigIntType:
+		return bigIntEncoder
+	case tagType:
+		return tagEncoder
+	case simpleType:
+		return simpleEncoder
+	case undefinedType:
+		return undefinedEncoder
+	case integerType:
+		return integerEncoder
+	}
+
 	switch t.Kind() {
 	case reflect.Bool:
 		return boolEncoder
@@ -132,8 +184,18 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 			return bytesEncoder
 		}
 		return sliceEncoder
+	case reflect.Array:
+		return sliceEncoder
+	case reflect.Map:
+		return mapEncoder
+	case reflect.Interface:
+		return interfaceEncoder
+	case reflect.Ptr:
+		return newPtrEncoder(t)
+	case reflect.Struct:
+		return newStructEncoder(t)
 	}
-	return nil
+	panic("TODO implement")
 }
 
 func boolEncoder(e *encodeState, v reflect.Value) error {
@@ -160,6 +222,70 @@ func bytesEncoder(e *encodeState, v reflect.Value) error {
 	return e.encodeBytes(v.Bytes())
 }
 
+func integerEncoder(e *encodeState, v reflect.Value) error {
+	i := v.Interface().(Integer)
+	if i.Sign {
+		e.writeUint(majorTypeNegativeInt, i.Value)
+	} else {
+		e.writeUint(majorTypePositiveInt, i.Value)
+	}
+	return nil
+}
+
+func bigIntEncoder(e *encodeState, v reflect.Value) error {
+	i := v.Interface().(*big.Int)
+	if i.Sign() >= 0 {
+		e.writeByte(0xc2) // tag 2: positive bigint
+		return e.encodeBytes(i.Bytes())
+	} else {
+		e.writeByte(0xc3) // tag 3: negative bigint
+		x := big.NewInt(-1)
+		x.Sub(x, i)
+		return e.encodeBytes(x.Bytes())
+	}
+}
+
+func tagEncoder(e *encodeState, v reflect.Value) error {
+	tag := v.Interface().(Tag)
+	switch {
+	case tag.Number < 24:
+		e.writeByte(byte(0xc0 + tag.Number))
+	case tag.Number < 0x100:
+		e.writeByte(0xd8)
+		e.writeByte(byte(tag.Number))
+	case tag.Number < 0x10000:
+		e.writeByte(0xd9)
+		e.writeUint16(uint16(tag.Number))
+	case tag.Number < 0x100000000:
+		e.writeByte(0xda)
+		e.writeUint32(uint32(tag.Number))
+	default:
+		e.writeByte(0xdb)
+		e.writeUint64(uint64(tag.Number))
+	}
+	return e.encode(tag.Content)
+}
+
+func simpleEncoder(e *encodeState, v reflect.Value) error {
+	s := v.Uint()
+	switch {
+	case s < 24:
+		e.writeByte(0xe0 | byte(s))
+	case s < 32:
+		return errors.New("cbor: reserved simple value")
+	default:
+		e.writeByte(0xf8) // simple value
+		e.writeByte(byte(s))
+	}
+	return nil
+
+}
+
+func undefinedEncoder(e *encodeState, v reflect.Value) error {
+	e.writeByte(0xf7)
+	return nil
+}
+
 func sliceEncoder(e *encodeState, v reflect.Value) error {
 	l := v.Len()
 	switch {
@@ -168,10 +294,10 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 	case l < 0x100:
 		e.writeByte(0x98)
 		e.writeByte(byte(l))
-	case l < 0x10000:
+	case int64(l) < 0x10000:
 		e.writeByte(0x99)
 		e.writeUint16(uint16(l))
-	case l < 0x100000000:
+	case int64(l) < 0x100000000:
 		e.writeByte(0x9a)
 		e.writeUint32(uint32(l))
 	default:
@@ -185,6 +311,113 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 		}
 	}
 	return nil
+}
+
+type mapKey struct {
+	key     reflect.Value
+	encoded []byte
+}
+
+func cmpMapKey(a, b mapKey) int {
+	return bytes.Compare(a.encoded, b.encoded)
+}
+
+func mapEncoder(s *encodeState, v reflect.Value) error {
+	l := v.Len()
+	keys := make([]mapKey, 0, l)
+	for _, key := range v.MapKeys() {
+		encoded, err := Marshal(key.Interface())
+		if err != nil {
+			return err
+		}
+		keys = append(keys, mapKey{key, encoded})
+	}
+	slices.SortFunc(keys, cmpMapKey)
+
+	// encode the length
+	s.writeUint(majorTypeMap, uint64(l))
+	for _, key := range keys {
+		s.buf.Write(key.encoded)
+		value := v.MapIndex(key.key)
+		if err := s.encodeReflectValue(value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func interfaceEncoder(s *encodeState, v reflect.Value) error {
+	if v.IsNil() {
+		return s.encodeNull()
+	}
+	return s.encodeReflectValue(v.Elem())
+}
+
+type ptrEncoder struct {
+	elemEnc encoderFunc
+}
+
+func (pe ptrEncoder) encode(e *encodeState, v reflect.Value) error {
+	if v.IsNil() {
+		return e.encodeNull()
+	}
+	// TODO: check for circular references
+	return pe.elemEnc(e, v.Elem())
+}
+
+func newPtrEncoder(t reflect.Type) encoderFunc {
+	enc := ptrEncoder{typeEncoder(t.Elem())}
+	return enc.encode
+}
+
+type structEncoder struct {
+	st *structType
+}
+
+func (se structEncoder) encodeAsMap(e *encodeState, v reflect.Value) error {
+	// count number of fields to encode
+	var l int
+	for _, f := range se.st.fields {
+		fv := v.FieldByIndex(f.index)
+		if f.omitempty && isEmptyValue(fv) {
+			continue
+		}
+		l++
+	}
+
+	e.writeUint(majorTypeMap, uint64(l))
+	for _, f := range se.st.fields {
+		fv := v.FieldByIndex(f.index)
+		if f.omitempty && isEmptyValue(fv) {
+			continue
+		}
+		e.buf.Write(f.encodedKey)
+		if err := e.encodeReflectValue(fv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (se structEncoder) encodeAsArray(e *encodeState, v reflect.Value) error {
+	e.writeUint(majorTypeArray, uint64(len(se.st.fields)))
+	for _, f := range se.st.fields {
+		fv := v.FieldByIndex(f.index)
+		if err := e.encodeReflectValue(fv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func newStructEncoder(t reflect.Type) encoderFunc {
+	st := cachedStructType(t)
+	se := structEncoder{st}
+	if st.toArray {
+		return se.encodeAsArray
+	} else {
+		return se.encodeAsMap
+	}
 }
 
 func (s *encodeState) writeByte(v byte) {
@@ -209,66 +442,37 @@ func (s *encodeState) writeUint64(v uint64) {
 	s.buf.Write(buf[:])
 }
 
-func (s *encodeState) encodeInt(v int64) error {
-	if v >= 0 {
-		return s.encodeUint(uint64(v))
-	}
-	v = -1 - v
+func (s *encodeState) writeUint(major majorType, v uint64) {
+	bits := byte(major) << 5
 	switch {
 	case v < 24:
-		// 0x20..0x37: negative integer (-1..-24)
-		s.writeByte(byte(0x20 + v))
-		return nil
+		s.writeByte(bits | byte(v))
 	case v < 0x100:
-		// 0x38: 1 byte negative integer
-		s.writeByte(0x38)
+		s.writeByte(bits | 24)
 		s.writeByte(byte(v))
-		return nil
 	case v < 0x10000:
-		// 0x39: 2 byte negative integer
-		s.writeByte(0x39)
+		s.writeByte(bits | 25)
 		s.writeUint16(uint16(v))
-		return nil
 	case v < 0x100000000:
-		// 0x3a: 4 byte negative integer
-		s.writeByte(0x3a)
+		s.writeByte(bits | 26)
 		s.writeUint32(uint32(v))
-		return nil
 	default:
-		// 0x3b: 8 byte negative integer
-		s.writeByte(0x3b)
+		s.writeByte(bits | 27)
 		s.writeUint64(uint64(v))
-		return nil
 	}
 }
 
+func (s *encodeState) encodeInt(v int64) error {
+	ui := uint64(v >> 63)
+	typ := majorType(ui) & majorTypeNegativeInt
+	ui ^= uint64(v)
+	s.writeUint(typ, ui)
+	return nil
+}
+
 func (s *encodeState) encodeUint(v uint64) error {
-	switch {
-	case v < 24:
-		// 0x00..0x17: positive integer (0..23)
-		s.writeByte(byte(v))
-		return nil
-	case v < 0x100:
-		// 0x18: 1 byte positive integer
-		s.writeByte(0x18)
-		s.writeByte(byte(v))
-		return nil
-	case v < 0x10000:
-		// 0x19: 2 byte positive integer
-		s.writeByte(0x19)
-		s.writeUint16(uint16(v))
-		return nil
-	case v < 0x100000000:
-		// 0x1a: 4 byte positive integer
-		s.writeByte(0x1a)
-		s.writeUint32(uint32(v))
-		return nil
-	default:
-		// 0x1b: 8 byte positive integer
-		s.writeByte(0x1b)
-		s.writeUint64(uint64(v))
-		return nil
-	}
+	s.writeUint(majorTypePositiveInt, uint64(v))
+	return nil
 }
 
 func (s *encodeState) encodeFloat64(v float64) error {
@@ -364,51 +568,16 @@ func (s *encodeState) encodeNull() error {
 	return nil
 }
 
-func (s *encodeState) encodeUndefined() error {
-	s.writeByte(0xf7) // undefined
-	return nil
-}
-
 func (s *encodeState) encodeBytes(v []byte) error {
 	l := len(v)
-	switch {
-	case l < 0x17:
-		s.writeByte(byte(0x40 + l))
-	case l < 0x100:
-		s.writeByte(0x58)
-		s.writeByte(byte(l))
-	case l < 0x10000:
-		s.writeByte(0x59)
-		s.writeUint16(uint16(l))
-	case l < 0x100000000:
-		s.writeByte(0x5a)
-		s.writeUint32(uint32(l))
-	default:
-		s.writeByte(0x5b)
-		s.writeUint64(uint64(l))
-	}
+	s.writeUint(majorTypeBytes, uint64(l))
 	s.buf.Write(v)
 	return nil
 }
 
 func (s *encodeState) encodeString(v string) error {
 	l := len(v)
-	switch {
-	case l < 0x17:
-		s.writeByte(byte(0x60 + l))
-	case l < 0x100:
-		s.writeByte(0x78)
-		s.writeByte(byte(l))
-	case l < 0x10000:
-		s.writeByte(0x79)
-		s.writeUint16(uint16(l))
-	case l < 0x100000000:
-		s.writeByte(0x7a)
-		s.writeUint32(uint32(l))
-	default:
-		s.writeByte(0x7b)
-		s.writeUint64(uint64(l))
-	}
+	s.writeUint(majorTypeString, uint64(l))
 	s.buf.WriteString(v)
 	return nil
 }
