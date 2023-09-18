@@ -951,6 +951,7 @@ func (d *decodeState) decodeArray(start int, n uint64, u Unmarshaler, v reflect.
 				return err
 			}
 		}
+
 	case reflect.Interface:
 		if v.NumMethod() != 0 {
 			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
@@ -962,6 +963,33 @@ func (d *decodeState) decodeArray(start int, n uint64, u Unmarshaler, v reflect.
 				return err
 			}
 		}
+
+	case reflect.Struct:
+		st := cachedStructType(v.Type())
+		if !st.toArray {
+			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
+		}
+		i := 0
+		for i = 0; i < int(n) && i < len(st.fields); i++ {
+			f := v.FieldByIndex(st.fields[i].index)
+			if err := d.decodeReflectValue(f); err != nil {
+				return err
+			}
+		}
+
+		// skip remaining fields
+		for j := i; j < int(n); j++ {
+			if err := d.checkWellFormedChild(); err != nil {
+				return err
+			}
+		}
+
+		// fill zero values for omitted fields
+		for j := i; j < len(st.fields); j++ {
+			f := v.FieldByIndex(st.fields[j].index)
+			f.Set(reflect.Zero(f.Type()))
+		}
+
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
 	}

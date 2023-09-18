@@ -682,6 +682,24 @@ var unmarshalTests = []struct {
 		new(FooB),
 		&FooB{Alg: 42, Kit: []byte("kit")},
 	},
+	{
+		"array to struct c",
+		[]byte{0x82, 0x01, 0x61, 0x32},
+		new(FooC),
+		&FooC{A: 1, B: "2"},
+	},
+	{
+		"short array to struct c",
+		[]byte{0x81, 0x01},
+		&FooC{A: 1, B: "2"},
+		&FooC{A: 1},
+	},
+	{
+		"long array to struct c",
+		[]byte{0x83, 0x01, 0x61, 0x32, 0x02},
+		&FooC{},
+		&FooC{A: 1, B: "2"},
+	},
 }
 
 func TestUnmarshal(t *testing.T) {
