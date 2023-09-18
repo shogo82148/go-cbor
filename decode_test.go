@@ -668,6 +668,20 @@ var unmarshalTests = []struct {
 		new(any),
 		ptr(any(Simple(255))),
 	},
+
+	// decode to struct
+	{
+		"struct a",
+		[]byte{0xa2, 0x61, 0x41, 0x01, 0x61, 0x42, 0x61, 0x32},
+		new(FooA),
+		&FooA{A: 1, B: "2"},
+	},
+	{
+		"struct b",
+		[]byte{0xa2, 0x01, 0x18, 0x2a, 0x04, 0x43, 0x6b, 0x69, 0x74},
+		new(FooB),
+		&FooB{Alg: 42, Kit: []byte("kit")},
+	},
 }
 
 func TestUnmarshal(t *testing.T) {

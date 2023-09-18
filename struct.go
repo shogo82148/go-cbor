@@ -1,7 +1,9 @@
 package cbor
 
 import (
+	"bytes"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,16 +23,23 @@ func cachedStructType(t reflect.Type) *structType {
 type structType struct {
 	toArray bool
 	fields  []field
+	maps    map[any]*field
 }
+
 type field struct {
+	key        any
 	encodedKey []byte
 	omitempty  bool
 	index      []int
 }
 
+func cmpFieldKey(a, b field) int {
+	return bytes.Compare(a.encodedKey, b.encodedKey)
+}
+
 func newStructType(t reflect.Type) *structType {
 	var toArray bool
-	fields := []field{}
+	fields := make([]field, 0, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		tag := f.Tag.Get("cbor")
@@ -61,9 +70,11 @@ func newStructType(t reflect.Type) *structType {
 			continue
 		}
 
+		var key any
 		var encodedKey []byte
 		if keyasint {
-			key, err := strconv.ParseInt(name, 10, 64)
+			var err error
+			key, err = strconv.ParseInt(name, 10, 64)
 			if err != nil {
 				// TODO: return error
 				panic(err)
@@ -78,6 +89,7 @@ func newStructType(t reflect.Type) *structType {
 			if name == "" {
 				name = f.Name
 			}
+			key = name
 			encodedKey, err = Marshal(name)
 			if err != nil {
 				// TODO: return error
@@ -86,13 +98,27 @@ func newStructType(t reflect.Type) *structType {
 		}
 
 		fields = append(fields, field{
+			key:        key,
 			encodedKey: encodedKey,
 			omitempty:  omitempty,
 			index:      f.Index,
 		})
 	}
+
+	// sort fields by encodedKey
+	if !toArray {
+		slices.SortStableFunc(fields, cmpFieldKey)
+	}
+
+	// build maps
+	maps := make(map[any]*field)
+	for i := range fields {
+		maps[fields[i].key] = &fields[i]
+	}
+
 	return &structType{
 		toArray: toArray,
 		fields:  fields,
+		maps:    maps,
 	}
 }

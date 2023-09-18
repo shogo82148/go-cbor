@@ -1099,6 +1099,24 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 		}
 		v.Set(reflect.ValueOf(m))
 
+	case reflect.Struct:
+		st := cachedStructType(v.Type())
+		for i := 0; i < int(n); i++ {
+			var key any
+			if err := d.decode(&key); err != nil {
+				return err
+			}
+			if f, ok := st.maps[key]; ok {
+				if err := d.decodeReflectValue(v.FieldByIndex(f.index)); err != nil {
+					return err
+				}
+			} else {
+				if err := d.checkWellFormedChild(); err != nil {
+					return err
+				}
+			}
+		}
+
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "map", Type: v.Type(), Offset: int64(start)})
 	}
