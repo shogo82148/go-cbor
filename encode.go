@@ -495,11 +495,11 @@ func (s *encodeState) encodeFloat64(v float64) error {
 			s.writeByte(byte(sign<<7 | 0x7c))
 			s.writeByte(0x00)
 			return nil
-		} else if frac&0x8000000000000 != 0 {
+		} else if frac != 0 {
 			// NaN in float16
+			// we don't support NaN payloads or signaling NaNs.
 			s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
-			f16 := uint16(0x7e00)
-			s.writeUint16(f16)
+			s.writeUint16(0x7e00)
 			return nil
 		}
 	}
