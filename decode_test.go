@@ -671,13 +671,19 @@ var unmarshalTests = []struct {
 
 	// decode to struct
 	{
-		"struct a",
+		"map to struct a",
 		[]byte{0xa2, 0x61, 0x41, 0x01, 0x61, 0x42, 0x61, 0x32},
 		new(FooA),
 		&FooA{A: 1, B: "2"},
 	},
 	{
-		"struct b",
+		"indefinite-length map to struct a",
+		[]byte{0xbf, 0x61, 0x41, 0x01, 0x61, 0x42, 0x61, 0x32, 0xff},
+		new(FooA),
+		&FooA{A: 1, B: "2"},
+	},
+	{
+		"map to struct b",
 		[]byte{0xa2, 0x01, 0x18, 0x2a, 0x04, 0x43, 0x6b, 0x69, 0x74},
 		new(FooB),
 		&FooB{Alg: 42, Kit: []byte("kit")},
