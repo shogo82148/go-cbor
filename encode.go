@@ -152,8 +152,6 @@ func typeEncoder(t reflect.Type) encoderFunc {
 	return f
 }
 
-var bigIntType = reflect.TypeOf((*big.Int)(nil))
-
 func newTypeEncoder(t reflect.Type) encoderFunc {
 	switch t {
 	case bigIntType:
