@@ -885,6 +885,46 @@ func TestUnmarshal_Error(t *testing.T) {
 	}
 }
 
+func TestUnmarshal_InvalidUnmarshalError(t *testing.T) {
+	t.Run("not a pointer", func(t *testing.T) {
+		var v int
+		err := Unmarshal([]byte{0x00}, v)
+		ie, ok := err.(*InvalidUnmarshalError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *InvalidUnmarshalError", err)
+			return
+		}
+		if ie.Type != reflect.TypeOf(v) {
+			t.Errorf("unexpected Type: got %v, want %v", ie.Type, reflect.TypeOf(v))
+		}
+
+		got := err.Error()
+		want := "cbor: Unmarshal(non-pointer int)"
+		if got != want {
+			t.Errorf("unexpected Error: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("nil pointer", func(t *testing.T) {
+		var v *int
+		err := Unmarshal([]byte{0x00}, v)
+		ie, ok := err.(*InvalidUnmarshalError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *InvalidUnmarshalError", err)
+			return
+		}
+		if ie.Type != reflect.TypeOf(v) {
+			t.Errorf("unexpected Type: got %v, want %v", ie.Type, reflect.TypeOf(v))
+		}
+
+		got := err.Error()
+		want := "cbor: Unmarshal(nil *int)"
+		if got != want {
+			t.Errorf("unexpected Error: got %q, want %q", got, want)
+		}
+	})
+}
+
 // RFC 8949 Appendix F
 var notWellFormed = [][]byte{
 	// End of input in a head

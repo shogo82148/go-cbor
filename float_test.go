@@ -64,17 +64,20 @@ func TestFloat(t *testing.T) {
 func TestFloat_Gen(t *testing.T) {
 	for _, tt := range f64ToBytesTests {
 		input := math.Float64frombits(tt.f64)
-		if math.IsNaN(input) {
-			continue
-		}
 		got, err := Marshal(input)
 		if err != nil {
 			t.Errorf("Marshal() error = %v", err)
 			continue
 		}
+		want := tt.bytes
+		if math.IsNaN(input) {
+			// support NaN payloads or signaling NaNs.
+			// NaN is always encoded as 0x7e00
+			want = []byte{0x7e, 0x00}
+		}
 		got = got[1:] // skip major type
-		if !bytes.Equal(got, tt.bytes) {
-			t.Errorf("EncodeFloat64(%x) = %x, want %x", input, got, tt.bytes)
+		if !bytes.Equal(got, want) {
+			t.Errorf("EncodeFloat64(%x) = %x, want %x", input, got, want)
 		}
 	}
 }

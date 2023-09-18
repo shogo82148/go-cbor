@@ -252,7 +252,7 @@ func indirect(v reflect.Value, decodingNull bool) (Unmarshaler, reflect.Value) {
 func (d *decodeState) decode(v any) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return errors.New("cbor: err") // TODO: introduce InvalidUnmarshalError
+		return &InvalidUnmarshalError{reflect.TypeOf(v)}
 	}
 	return d.decodeReflectValue(rv)
 }

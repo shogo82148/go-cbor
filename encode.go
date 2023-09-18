@@ -162,6 +162,8 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return simpleEncoder
 	case undefinedType:
 		return undefinedEncoder
+	case integerType:
+		return integerEncoder
 	}
 
 	switch t.Kind() {
@@ -216,6 +218,16 @@ func stringEncoder(e *encodeState, v reflect.Value) error {
 
 func bytesEncoder(e *encodeState, v reflect.Value) error {
 	return e.encodeBytes(v.Bytes())
+}
+
+func integerEncoder(e *encodeState, v reflect.Value) error {
+	i := v.Interface().(Integer)
+	if i.Sign {
+		e.writeUint(majorTypeNegativeInt, i.Value)
+	} else {
+		e.writeUint(majorTypePositiveInt, i.Value)
+	}
+	return nil
 }
 
 func bigIntEncoder(e *encodeState, v reflect.Value) error {
@@ -481,11 +493,11 @@ func (s *encodeState) encodeFloat64(v float64) error {
 			s.writeByte(byte(sign<<7 | 0x7c))
 			s.writeByte(0x00)
 			return nil
-		} else if frac&0x8000000000000 != 0 {
+		} else if frac != 0 {
 			// NaN in float16
+			// we don't support NaN payloads or signaling NaNs.
 			s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
-			f16 := uint16(0x7e00)
-			s.writeUint16(f16)
+			s.writeUint16(0x7e00)
 			return nil
 		}
 	}
