@@ -515,6 +515,39 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 	case 0xbf:
 		return d.decodeMapIndefinite(start, u, v)
 
+	// tags
+	case 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
+		n := TagNumber(typ - 0xc0)
+		return d.decodeTag(start, n, u, v)
+
+	case 0xd8:
+		n, err := d.readByte()
+		if err != nil {
+			return err
+		}
+		return d.decodeTag(start, TagNumber(n), u, v)
+
+	case 0xd9:
+		n, err := d.readUint16()
+		if err != nil {
+			return err
+		}
+		return d.decodeTag(start, TagNumber(n), u, v)
+
+	case 0xda:
+		n, err := d.readUint32()
+		if err != nil {
+			return err
+		}
+		return d.decodeTag(start, TagNumber(n), u, v)
+
+	case 0xdb:
+		n, err := d.readUint64()
+		if err != nil {
+			return err
+		}
+		return d.decodeTag(start, TagNumber(n), u, v)
+
 	// simple values
 	case 0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xf0, 0xf3:
 		if u != nil {
@@ -1153,6 +1186,26 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 	return nil
 }
 
+func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect.Value) error {
+	if u != nil {
+		if err := d.checkValidChild(); err != nil {
+			return err
+		}
+		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
+
+	var content any
+	if err := d.decode(&content); err != nil {
+		return err
+	}
+	if v.Type() == tagType {
+		v.Set(reflect.ValueOf(Tag{Number: n, Content: content}))
+		return nil
+	}
+	d.saveError(&UnmarshalTypeError{Value: "tag", Type: v.Type(), Offset: int64(start)})
+	return nil
+}
+
 func (d *decodeState) setSimple(start int, s Simple, v reflect.Value) error {
 	t := v.Type()
 	if t == simpleType {
@@ -1582,32 +1635,42 @@ func (d *decodeState) checkValidChild() error {
 			}
 		}
 
-	// text-based date/time
-	case 0xc0:
-		var s string
-		if err := d.decode(&s); err != nil {
+	// tags
+	// TODO: need to check for validate tag contents?
+	case 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
+		if err := d.checkValidChild(); err != nil {
 			return err
 		}
 
-	// epoch-based date/time
-	case 0xc1:
-		// TODO: check that the integer is a valid date/time
-
-	// unsigned bignum (data item "byte string" follows)
-	case 0xc2:
-		// TODO: check that the byte string is a valid bignum
-
-	// negative bignum (data item "byte string" follows)
-	case 0xc3:
-		// TODO: check that the byte string is a valid bignum
-
-	// decimal fraction (data item "array" follows)
-	case 0xc4:
-		// TODO: check that the array is a valid decimal fraction
-
-	// bigfloat (data item "array" follows)
-	case 0xc5:
-		// TODO: check that the array is a valid bigfloat
+	// (more tags; 1/2/4/8 bytes of tag number and then a data item follow)
+	case 0xd8:
+		if _, err := d.readByte(); err != nil {
+			return err
+		}
+		if err := d.checkValidChild(); err != nil {
+			return err
+		}
+	case 0xd9:
+		if _, err := d.readUint16(); err != nil {
+			return err
+		}
+		if err := d.checkValidChild(); err != nil {
+			return err
+		}
+	case 0xda:
+		if _, err := d.readUint32(); err != nil {
+			return err
+		}
+		if err := d.checkValidChild(); err != nil {
+			return err
+		}
+	case 0xdb:
+		if _, err := d.readUint64(); err != nil {
+			return err
+		}
+		if err := d.checkValidChild(); err != nil {
+			return err
+		}
 
 	// simple values
 	case 0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xf0, 0xf3:
