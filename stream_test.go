@@ -2,6 +2,7 @@ package cbor
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -62,18 +63,102 @@ func TestDecoder(t *testing.T) {
 }
 
 func TestDecoder_UserAnyKey(t *testing.T) {
-	input := []byte{0xa2, 0x01, 0x02, 0x03, 0x04}
-	want := map[any]any{int64(1): int64(2), int64(3): int64(4)}
+	t.Run("number key", func(t *testing.T) {
+		input := []byte{0xa2, 0x01, 0x02, 0x03, 0x04}
+		want := map[any]any{int64(1): int64(2), int64(3): int64(4)}
 
-	r := bytes.NewReader(input)
-	dec := NewDecoder(r)
-	dec.d.useAnyKey = true
-	var got any
-	if err := dec.Decode(&got); err != nil {
-		t.Fatal(err)
-	}
+		r := bytes.NewReader(input)
+		dec := NewDecoder(r)
+		dec.UseAnyKey()
+		var got any
+		if err := dec.Decode(&got); err != nil {
+			t.Fatal(err)
+		}
 
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
-	}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("various type keys", func(t *testing.T) {
+		input := []byte{
+			0xa8,       // 8 items map
+			0x0a, 0x01, // 10
+			0x18, 0x64, 0x02, // 100
+			0x20, 0x03, // -1
+			0x61, 0x7a, 0x04, // "z"
+			0x62, 0x61, 0x61, 0x05, // "aa"
+			0x81, 0x18, 0x64, 0x06, // [100]
+			0x81, 0x20, 0x07, // [-1]
+			0xf4, 0x08, // false
+		}
+		want := map[any]any{
+			int64(10):          int64(1),
+			int64(100):         int64(2),
+			int64(-1):          int64(3),
+			"z":                int64(4),
+			"aa":               int64(5),
+			[1]any{int64(100)}: int64(6),
+			[1]any{int64(-1)}:  int64(7),
+			false:              int64(8),
+		}
+
+		r := bytes.NewReader(input)
+		dec := NewDecoder(r)
+		dec.UseAnyKey()
+		var got any
+		if err := dec.Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("byte strings keys", func(t *testing.T) {
+		input := []byte{
+			0xa1,                         // one element map
+			0x44, 0x01, 0x02, 0x03, 0x04, // h'01020304'
+			0x01, // 1
+		}
+		want := map[any]any{
+			[4]byte{0x01, 0x02, 0x03, 0x04}: int64(1),
+		}
+
+		r := bytes.NewReader(input)
+		dec := NewDecoder(r)
+		dec.UseAnyKey()
+		var got any
+		if err := dec.Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("map map keys", func(t *testing.T) {
+		input := []byte{
+			0xa1,                         // one element map
+			0xa1,                         // one element map
+			0x44, 0x01, 0x02, 0x03, 0x04, // h'01020304'
+			0x01, // 1
+			0x02, // 2
+		}
+
+		r := bytes.NewReader(input)
+		dec := NewDecoder(r)
+		dec.UseAnyKey()
+		var got any
+		err := dec.Decode(&got)
+		if err == nil {
+			t.Error("Decode() should return error")
+		}
+		var se *SyntaxError
+		if !errors.As(err, &se) {
+			t.Errorf("Decode() should return SyntaxError, got %T", err)
+		}
+	})
 }
