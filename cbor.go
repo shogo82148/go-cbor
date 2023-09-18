@@ -14,6 +14,7 @@ var anySliceType = reflect.TypeOf([]any(nil))
 var simpleType = reflect.TypeOf(Simple(0))
 var tagType = reflect.TypeOf(Tag{})
 var undefinedType = reflect.TypeOf(Undefined)
+var byteType = reflect.TypeOf(byte(0))
 
 type undefined *struct{}
 

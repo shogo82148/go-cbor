@@ -68,7 +68,7 @@ func TestDecoder_UserAnyKey(t *testing.T) {
 
 		r := bytes.NewReader(input)
 		dec := NewDecoder(r)
-		dec.d.useAnyKey = true
+		dec.UseAnyKey()
 		var got any
 		if err := dec.Decode(&got); err != nil {
 			t.Fatal(err)
@@ -104,7 +104,30 @@ func TestDecoder_UserAnyKey(t *testing.T) {
 
 		r := bytes.NewReader(input)
 		dec := NewDecoder(r)
-		dec.d.useAnyKey = true
+		dec.UseAnyKey()
+		var got any
+		if err := dec.Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("byte strings keys", func(t *testing.T) {
+		input := []byte{
+			0xa1,                         // one element map
+			0x44, 0x01, 0x02, 0x03, 0x04, // h'01020304'
+			0x01, // 1
+		}
+		want := map[any]any{
+			[4]byte{0x01, 0x02, 0x03, 0x04}: int64(1),
+		}
+
+		r := bytes.NewReader(input)
+		dec := NewDecoder(r)
+		dec.UseAnyKey()
 		var got any
 		if err := dec.Decode(&got); err != nil {
 			t.Fatal(err)

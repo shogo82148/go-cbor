@@ -831,7 +831,17 @@ func (d *decodeState) setBytes(start int, data []byte, v reflect.Value) error {
 			d.saveError(&UnmarshalTypeError{Value: "bytes", Type: v.Type(), Offset: int64(start)})
 			break
 		}
-		v.Set(reflect.ValueOf(data))
+		if d.decodingKeys {
+			// slices cannot be used as map keys; fall back to array.
+			t := reflect.ArrayOf(len(data), byteType)
+			array := reflect.New(t).Elem()
+			for i, b := range data {
+				array.Index(i).SetUint(uint64(b))
+			}
+			v.Set(array)
+		} else {
+			v.Set(reflect.ValueOf(data))
+		}
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "bytes", Type: v.Type(), Offset: int64(start)})
 	}
