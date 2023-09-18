@@ -995,3 +995,13 @@ func TestValid_invalid(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkMaliciousCBORData(b *testing.B) {
+	var v any
+	input := []byte{0x9B, 0x00, 0x00, 0x42, 0xFA, 0x42, 0xFA, 0x42, 0xFA, 0x42}
+	for i := 0; i < b.N; i++ {
+		if err := Unmarshal(input, v); err == nil {
+			b.Error("want error, but not")
+		}
+	}
+}
