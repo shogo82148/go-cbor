@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/big"
 	"testing"
+	"time"
 )
 
 func newBigInt(s string) *big.Int {
@@ -481,6 +482,13 @@ func TestMarshal(t *testing.T) {
 				"0": Simple(2),
 			},
 			[]byte{0xa1, 0x61, 0x30, 0xe2},
+		},
+
+		// datetime
+		{
+			"datetime",
+			time.Unix(1363896240, 500_000_000).UTC(),
+			[]byte{0xc1, 0xfb, 0x41, 0xd4, 0x52, 0xd9, 0xec, 0x20, 0x00, 0x00},
 		},
 
 		// struct

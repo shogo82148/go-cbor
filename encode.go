@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"sync"
+	"time"
 )
 
 type CBORMarshaler interface {
@@ -164,6 +165,8 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return undefinedEncoder
 	case integerType:
 		return integerEncoder
+	case timeType:
+		return timeEncoder
 	}
 
 	switch t.Kind() {
@@ -277,6 +280,13 @@ func simpleEncoder(e *encodeState, v reflect.Value) error {
 	}
 	return nil
 
+}
+
+func timeEncoder(e *encodeState, v reflect.Value) error {
+	e.writeByte(0xc1) // tag 1: epoch-based date/time
+	t := v.Interface().(time.Time)
+	epoch := float64(t.UnixNano()) / 1e9
+	return e.encodeFloat64(epoch)
 }
 
 func undefinedEncoder(e *encodeState, v reflect.Value) error {
