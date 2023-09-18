@@ -66,7 +66,7 @@ func Unmarshal(data []byte, v any) error {
 	// Check for well-formedness.
 	// Avoids filling out half a data structure
 	// before discovering a JSON syntax error.
-	if err := d.checkValid(); err != nil {
+	if err := d.checkWellFormed(); err != nil {
 		return err
 	}
 
@@ -849,8 +849,10 @@ func (d *decodeState) decodeString(start int, n uint64, u Unmarshaler, v reflect
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
 
-	// UTF-8 validation is done by the checkValid method; wo don't need to do it here.
-	s := string(d.data[off : off+int(n)])
+	if !utf8.Valid(d.data[off:d.off]) {
+		return d.newSyntaxError("cbor: invalid UTF-8 string")
+	}
+	s := string(d.data[off:d.off])
 	return d.setString(start, s, v)
 }
 
@@ -911,7 +913,11 @@ LOOP:
 	if u != nil {
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
-	return d.setString(start, builder.String(), v)
+	s := builder.String()
+	if !utf8.ValidString(s) {
+		return d.newSyntaxError("cbor: invalid UTF-8 string")
+	}
+	return d.setString(start, s, v)
 }
 
 func (d *decodeState) setString(start int, s string, v reflect.Value) error {
@@ -933,7 +939,7 @@ func (d *decodeState) setString(start int, s string, v reflect.Value) error {
 func (d *decodeState) decodeArray(start int, n uint64, u Unmarshaler, v reflect.Value) error {
 	if u != nil {
 		for i := 0; i < int(n); i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -978,7 +984,7 @@ func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.
 				d.off++
 				break
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1050,10 +1056,10 @@ func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.
 func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Value) error {
 	if u != nil {
 		for i := 0; i < int(n); i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return nil
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return nil
 			}
 		}
@@ -1115,10 +1121,10 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 				d.off++
 				break
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1188,7 +1194,7 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 
 func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect.Value) error {
 	if u != nil {
-		if err := d.checkValidChild(); err != nil {
+		if err := d.checkWellFormedChild(); err != nil {
 			return err
 		}
 		return u.UnmarshalCBOR(d.data[start:d.off])
@@ -1272,14 +1278,14 @@ func (d *decodeState) setUndefined(start int, v reflect.Value) error {
 	return nil
 }
 
-// Valid reports whether data is a valid CBOR encoding.
-func Valid(data []byte) bool {
+// WellFormed reports whether data is a valid CBOR encoding.
+func WellFormed(data []byte) bool {
 	d := newDecodeState(data)
-	return d.checkValid() == nil
+	return d.checkWellFormed() == nil
 }
 
-func (d *decodeState) checkValid() error {
-	if err := d.checkValidChild(); err != nil {
+func (d *decodeState) checkWellFormed() error {
+	if err := d.checkWellFormedChild(); err != nil {
 		return err
 	}
 	if d.off != len(d.data) {
@@ -1288,7 +1294,7 @@ func (d *decodeState) checkValid() error {
 	return nil
 }
 
-func (d *decodeState) checkValidChild() error {
+func (d *decodeState) checkWellFormedChild() error {
 	typ, err := d.readByte()
 	if err != nil {
 		return err
@@ -1415,7 +1421,7 @@ func (d *decodeState) checkValidChild() error {
 			if typ < 0x40 || typ > 0x5b {
 				return errors.New("cbor: invalid byte string")
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1423,9 +1429,10 @@ func (d *decodeState) checkValidChild() error {
 	// text string (0x00..0x17 bytes follow)
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
 		n := int(typ - 0x60)
-		if err := d.checkValidString(uint64(n)); err != nil {
-			return err
+		if !d.isAvailable(uint64(n)) {
+			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (one-byte uint8_t for n, and then n bytes follow)
 	case 0x78:
@@ -1433,9 +1440,10 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if err := d.checkValidString(uint64(n)); err != nil {
-			return err
+		if !d.isAvailable(uint64(n)) {
+			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (two-byte uint16_t for n, and then n bytes follow)
 	case 0x79:
@@ -1443,9 +1451,10 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if err := d.checkValidString(uint64(n)); err != nil {
-			return err
+		if !d.isAvailable(uint64(n)) {
+			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (four-byte uint32_t for n, and then n bytes follow)
 	case 0x7a:
@@ -1453,9 +1462,10 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if err := d.checkValidString(uint64(n)); err != nil {
-			return err
+		if !d.isAvailable(uint64(n)) {
+			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (eight-byte uint64_t for n, and then n bytes follow)
 	case 0x7b:
@@ -1463,9 +1473,10 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if err := d.checkValidString(uint64(n)); err != nil {
-			return err
+		if !d.isAvailable(uint64(n)) {
+			return d.newSyntaxError("cbor: unexpected end")
 		}
+		d.off += int(n)
 
 	// text string (indefinite length)
 	case 0x7f:
@@ -1474,15 +1485,12 @@ func (d *decodeState) checkValidChild() error {
 		if err != nil {
 			return err
 		}
-		if !utf8.ValidString(s) {
-			d.saveError(d.newSyntaxError("cbor: invalid UTF-8 string"))
-		}
 
 	// array (0x00..0x17 data items follow)
 	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97:
 		n := int(typ - 0x80)
 		for i := 0; i < n; i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1494,7 +1502,7 @@ func (d *decodeState) checkValidChild() error {
 			return err
 		}
 		for i := 0; i < int(n); i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1506,7 +1514,7 @@ func (d *decodeState) checkValidChild() error {
 			return err
 		}
 		for i := 0; i < int(n); i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1518,7 +1526,7 @@ func (d *decodeState) checkValidChild() error {
 			return err
 		}
 		for i := uint64(0); i < uint64(n); i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1530,7 +1538,7 @@ func (d *decodeState) checkValidChild() error {
 			return err
 		}
 		for i := uint64(0); i < n; i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1547,7 +1555,7 @@ func (d *decodeState) checkValidChild() error {
 				break
 			}
 
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1556,10 +1564,10 @@ func (d *decodeState) checkValidChild() error {
 	case 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7:
 		n := int(typ - 0xa0)
 		for i := 0; i < n; i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1571,10 +1579,10 @@ func (d *decodeState) checkValidChild() error {
 			return err
 		}
 		for i := uint8(0); i < n; i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1586,10 +1594,10 @@ func (d *decodeState) checkValidChild() error {
 			return err
 		}
 		for i := uint16(0); i < n; i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1601,10 +1609,10 @@ func (d *decodeState) checkValidChild() error {
 			return err
 		}
 		for i := uint32(0); i < n; i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1616,10 +1624,10 @@ func (d *decodeState) checkValidChild() error {
 			return err
 		}
 		for i := uint64(0); i < n; i++ {
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
@@ -1636,18 +1644,17 @@ func (d *decodeState) checkValidChild() error {
 				break
 			}
 
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
-			if err := d.checkValidChild(); err != nil {
+			if err := d.checkWellFormedChild(); err != nil {
 				return err
 			}
 		}
 
 	// tags
-	// TODO: need to check for validate tag contents?
 	case 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
-		if err := d.checkValidChild(); err != nil {
+		if err := d.checkWellFormedChild(); err != nil {
 			return err
 		}
 
@@ -1656,28 +1663,28 @@ func (d *decodeState) checkValidChild() error {
 		if _, err := d.readByte(); err != nil {
 			return err
 		}
-		if err := d.checkValidChild(); err != nil {
+		if err := d.checkWellFormedChild(); err != nil {
 			return err
 		}
 	case 0xd9:
 		if _, err := d.readUint16(); err != nil {
 			return err
 		}
-		if err := d.checkValidChild(); err != nil {
+		if err := d.checkWellFormedChild(); err != nil {
 			return err
 		}
 	case 0xda:
 		if _, err := d.readUint32(); err != nil {
 			return err
 		}
-		if err := d.checkValidChild(); err != nil {
+		if err := d.checkWellFormedChild(); err != nil {
 			return err
 		}
 	case 0xdb:
 		if _, err := d.readUint64(); err != nil {
 			return err
 		}
-		if err := d.checkValidChild(); err != nil {
+		if err := d.checkWellFormedChild(); err != nil {
 			return err
 		}
 
@@ -1728,17 +1735,6 @@ func (d *decodeState) checkValidChild() error {
 		return d.newSyntaxError("cbor: unknown initial byte: " + strconv.Itoa(int(typ)))
 	}
 
-	return nil
-}
-
-func (d *decodeState) checkValidString(n uint64) error {
-	if !d.isAvailable(n) {
-		return d.newSyntaxError("cbor: unexpected end")
-	}
-	if !utf8.Valid(d.data[d.off : d.off+int(n)]) {
-		d.saveError(d.newSyntaxError("cbor: invalid UTF-8 string"))
-	}
-	d.off += int(n)
 	return nil
 }
 

@@ -914,7 +914,7 @@ var notWellFormed = [][]byte{
 
 func TestValid_valid(t *testing.T) {
 	for _, tt := range unmarshalTests {
-		if !Valid(tt.data) {
+		if !WellFormed(tt.data) {
 			t.Errorf("Valid(%x) = false, want true", tt.data)
 		}
 	}
@@ -922,7 +922,7 @@ func TestValid_valid(t *testing.T) {
 
 func TestValid_invalid(t *testing.T) {
 	for _, tt := range notWellFormed {
-		if Valid(tt) {
+		if WellFormed(tt) {
 			t.Errorf("Valid(%x) = true, want false", tt)
 		}
 	}
