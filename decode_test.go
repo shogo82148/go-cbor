@@ -835,6 +835,14 @@ func TestUnmarshal_Error(t *testing.T) {
 			new(float32),
 			&UnmarshalTypeError{Value: "float", Type: typeOf[float32](), Offset: 0},
 		},
+
+		// struct
+		{
+			"map to struct",
+			[]byte{0xa1, 0x61, 0x41, 0x61, 0x30}, // {A: "0"}
+			new(FooA),
+			&UnmarshalTypeError{Value: "string", Type: typeOf[int](), Offset: 3, Struct: "FooA", Field: "A"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -980,7 +988,7 @@ var notWellFormed = [][]byte{
 	{0xdf},
 }
 
-func TestValid_valid(t *testing.T) {
+func TestWellFormed_valid(t *testing.T) {
 	for _, tt := range unmarshalTests {
 		if !WellFormed(tt.data) {
 			t.Errorf("Valid(%x) = false, want true", tt.data)
@@ -988,7 +996,7 @@ func TestValid_valid(t *testing.T) {
 	}
 }
 
-func TestValid_invalid(t *testing.T) {
+func TestWellFormed_invalid(t *testing.T) {
 	for _, tt := range notWellFormed {
 		if WellFormed(tt) {
 			t.Errorf("Valid(%x) = true, want false", tt)
