@@ -547,7 +547,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 	// tag 0: Standard date/time string
 	case 0xc0:
-		if u != nil {
+		if u != nil || v.Type() == tagType {
 			n := TagNumber(typ - 0xc0)
 			return d.decodeTag(start, n, u, v)
 		}
@@ -563,7 +563,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 	// tag 1: Epoch-based date/time
 	case 0xc1:
-		if u != nil {
+		if u != nil || v.Type() == tagType {
 			n := TagNumber(typ - 0xc0)
 			return d.decodeTag(start, n, u, v)
 		}
@@ -584,7 +584,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 	// tag 2: Unsigned bignum
 	case 0xc2:
-		if u != nil {
+		if u != nil || v.Type() == tagType {
 			n := TagNumber(typ - 0xc0)
 			return d.decodeTag(start, n, u, v)
 		}
@@ -601,7 +601,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 	// tag 3: Negative bignum
 	case 0xc3:
-		if u != nil {
+		if u != nil || v.Type() == tagType {
 			n := TagNumber(typ - 0xc0)
 			return d.decodeTag(start, n, u, v)
 		}
