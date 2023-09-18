@@ -482,6 +482,14 @@ func TestMarshal(t *testing.T) {
 			},
 		},
 
+		{
+			"simple value in map",
+			map[string]any{
+				"0": Simple(2),
+			},
+			[]byte{0xa1, 0x61, 0x30, 0xe2},
+		},
+
 		// struct
 		{
 			"struct a",

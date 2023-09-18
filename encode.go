@@ -51,8 +51,6 @@ type encodeState struct {
 func (s *encodeState) encode(v any) error {
 	// fast path for basic types
 	switch v := v.(type) {
-	case Simple:
-		return s.encodeSimple(v)
 	case int8:
 		return s.encodeInt(int64(v))
 	case int16:
@@ -166,6 +164,8 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return bigIntEncoder
 	case tagType:
 		return tagEncoder
+	case simpleType:
+		return simpleEncoder
 	}
 
 	switch t.Kind() {
@@ -254,6 +254,21 @@ func tagEncoder(e *encodeState, v reflect.Value) error {
 		e.writeUint64(uint64(tag.Number))
 	}
 	return e.encode(tag.Content)
+}
+
+func simpleEncoder(e *encodeState, v reflect.Value) error {
+	s := v.Uint()
+	switch {
+	case s < 24:
+		e.writeByte(0xe0 | byte(s))
+	case s < 32:
+		return errors.New("cbor: reserved simple value")
+	default:
+		e.writeByte(0xf8) // simple value
+		e.writeByte(byte(s))
+	}
+	return nil
+
 }
 
 func sliceEncoder(e *encodeState, v reflect.Value) error {
@@ -609,19 +624,6 @@ func (s *encodeState) encodeNull() error {
 
 func (s *encodeState) encodeUndefined() error {
 	s.writeByte(0xf7) // undefined
-	return nil
-}
-
-func (s *encodeState) encodeSimple(v Simple) error {
-	switch {
-	case v < 24:
-		s.writeByte(0xe0 | byte(v))
-	case v < 32:
-		return errors.New("cbor: reserved simple value")
-	default:
-		s.writeByte(0xf8) // simple value
-		s.writeByte(byte(v))
-	}
 	return nil
 }
 
