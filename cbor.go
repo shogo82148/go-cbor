@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"time"
 )
 
 var anySliceType = reflect.TypeOf([]any(nil))
@@ -16,6 +17,7 @@ var byteType = reflect.TypeOf(byte(0))
 var integerType = reflect.TypeOf(Integer{})
 var simpleType = reflect.TypeOf(Simple(0))
 var tagType = reflect.TypeOf(Tag{})
+var timeType = reflect.TypeOf((*time.Time)(nil)).Elem()
 var undefinedType = reflect.TypeOf(Undefined)
 
 var minusOne = big.NewInt(-1)
