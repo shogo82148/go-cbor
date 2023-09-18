@@ -657,6 +657,7 @@ func (d *decodeState) decodePositiveInt(start int, w uint64, v reflect.Value) er
 	switch v.Type() {
 	case integerType:
 		v.Set(reflect.ValueOf(Integer{Value: w}))
+		return nil
 	}
 
 	switch v.Kind() {
@@ -696,6 +697,7 @@ func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) er
 	switch v.Type() {
 	case integerType:
 		v.Set(reflect.ValueOf(Integer{Sign: true, Value: w}))
+		return nil
 	}
 
 	switch v.Kind() {
