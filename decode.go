@@ -1044,6 +1044,7 @@ func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.
 		if i == 0 {
 			v.Set(reflect.MakeSlice(v.Type(), 0, 0))
 		}
+
 	case reflect.Interface:
 		// Decoding into nil interface? Switch to non-reflect code.
 		if v.NumMethod() != 0 {
@@ -1068,6 +1069,43 @@ func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.
 			s = append(s, e)
 		}
 		v.Set(reflect.ValueOf(s))
+
+	case reflect.Struct:
+		st := cachedStructType(v.Type())
+		if !st.toArray {
+			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
+		}
+
+		i := 0
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				d.off++
+				break
+			}
+
+			if i < len(st.fields) {
+				f := v.FieldByIndex(st.fields[i].index)
+				if err := d.decodeReflectValue(f); err != nil {
+					return err
+				}
+			} else {
+				if err := d.checkWellFormedChild(); err != nil {
+					return err
+				}
+			}
+			i++
+		}
+
+		// fill zero values for omitted fields
+		for j := i; j < len(st.fields); j++ {
+			f := v.FieldByIndex(st.fields[j].index)
+			f.Set(reflect.Zero(f.Type()))
+		}
+
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
 		return nil

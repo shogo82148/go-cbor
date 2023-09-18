@@ -706,6 +706,24 @@ var unmarshalTests = []struct {
 		&FooC{},
 		&FooC{A: 1, B: "2"},
 	},
+	{
+		"indefinite-length array to struct c",
+		[]byte{0x9f, 0x01, 0x61, 0x32, 0xff},
+		new(FooC),
+		&FooC{A: 1, B: "2"},
+	},
+	{
+		"short indefinite-length array to struct c",
+		[]byte{0x9f, 0x01, 0xff},
+		&FooC{A: 1, B: "2"},
+		&FooC{A: 1},
+	},
+	{
+		"long indefinite-length array to struct c",
+		[]byte{0x9f, 0x01, 0x61, 0x32, 0x02, 0xff},
+		new(FooC),
+		&FooC{A: 1, B: "2"},
+	},
 }
 
 func TestUnmarshal(t *testing.T) {
