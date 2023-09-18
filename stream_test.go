@@ -2,6 +2,7 @@ package cbor
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -135,6 +136,29 @@ func TestDecoder_UserAnyKey(t *testing.T) {
 
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("map map keys", func(t *testing.T) {
+		input := []byte{
+			0xa1,                         // one element map
+			0xa1,                         // one element map
+			0x44, 0x01, 0x02, 0x03, 0x04, // h'01020304'
+			0x01, // 1
+			0x02, // 2
+		}
+
+		r := bytes.NewReader(input)
+		dec := NewDecoder(r)
+		dec.UseAnyKey()
+		var got any
+		err := dec.Decode(&got)
+		if err == nil {
+			t.Error("Decode() should return error")
+		}
+		var se *SyntaxError
+		if !errors.As(err, &se) {
+			t.Errorf("Decode() should return SyntaxError, got %T", err)
 		}
 	})
 }
