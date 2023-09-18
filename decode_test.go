@@ -668,6 +668,62 @@ var unmarshalTests = []struct {
 		new(any),
 		ptr(any(Simple(255))),
 	},
+
+	// decode to struct
+	{
+		"map to struct a",
+		[]byte{0xa2, 0x61, 0x41, 0x01, 0x61, 0x42, 0x61, 0x32},
+		new(FooA),
+		&FooA{A: 1, B: "2"},
+	},
+	{
+		"indefinite-length map to struct a",
+		[]byte{0xbf, 0x61, 0x41, 0x01, 0x61, 0x42, 0x61, 0x32, 0xff},
+		new(FooA),
+		&FooA{A: 1, B: "2"},
+	},
+	{
+		"map to struct b",
+		[]byte{0xa2, 0x01, 0x18, 0x2a, 0x04, 0x43, 0x6b, 0x69, 0x74},
+		new(FooB),
+		&FooB{Alg: 42, Kit: []byte("kit")},
+	},
+	{
+		"array to struct c",
+		[]byte{0x82, 0x01, 0x61, 0x32},
+		new(FooC),
+		&FooC{A: 1, B: "2"},
+	},
+	{
+		"short array to struct c",
+		[]byte{0x81, 0x01},
+		&FooC{A: 1, B: "2"},
+		&FooC{A: 1},
+	},
+	{
+		"long array to struct c",
+		[]byte{0x83, 0x01, 0x61, 0x32, 0x02},
+		&FooC{},
+		&FooC{A: 1, B: "2"},
+	},
+	{
+		"indefinite-length array to struct c",
+		[]byte{0x9f, 0x01, 0x61, 0x32, 0xff},
+		new(FooC),
+		&FooC{A: 1, B: "2"},
+	},
+	{
+		"short indefinite-length array to struct c",
+		[]byte{0x9f, 0x01, 0xff},
+		&FooC{A: 1, B: "2"},
+		&FooC{A: 1},
+	},
+	{
+		"long indefinite-length array to struct c",
+		[]byte{0x9f, 0x01, 0x61, 0x32, 0x02, 0xff},
+		new(FooC),
+		&FooC{A: 1, B: "2"},
+	},
 }
 
 func TestUnmarshal(t *testing.T) {

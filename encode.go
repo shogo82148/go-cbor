@@ -8,8 +8,6 @@ import (
 	"math/big"
 	"reflect"
 	"slices"
-	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -361,19 +359,13 @@ func newPtrEncoder(t reflect.Type) encoderFunc {
 }
 
 type structEncoder struct {
-	fields []field
-}
-
-type field struct {
-	encodedKey []byte
-	omitempty  bool
-	index      []int
+	st *structType
 }
 
 func (se structEncoder) encodeAsMap(e *encodeState, v reflect.Value) error {
 	// count number of fields to encode
 	var l int
-	for _, f := range se.fields {
+	for _, f := range se.st.fields {
 		fv := v.FieldByIndex(f.index)
 		if f.omitempty && isEmptyValue(fv) {
 			continue
@@ -382,7 +374,7 @@ func (se structEncoder) encodeAsMap(e *encodeState, v reflect.Value) error {
 	}
 
 	e.writeUint(majorTypeMap, uint64(l))
-	for _, f := range se.fields {
+	for _, f := range se.st.fields {
 		fv := v.FieldByIndex(f.index)
 		if f.omitempty && isEmptyValue(fv) {
 			continue
@@ -396,8 +388,8 @@ func (se structEncoder) encodeAsMap(e *encodeState, v reflect.Value) error {
 }
 
 func (se structEncoder) encodeAsArray(e *encodeState, v reflect.Value) error {
-	e.writeUint(majorTypeArray, uint64(len(se.fields)))
-	for _, f := range se.fields {
+	e.writeUint(majorTypeArray, uint64(len(se.st.fields)))
+	for _, f := range se.st.fields {
 		fv := v.FieldByIndex(f.index)
 		if err := e.encodeReflectValue(fv); err != nil {
 			return err
@@ -407,72 +399,9 @@ func (se structEncoder) encodeAsArray(e *encodeState, v reflect.Value) error {
 }
 
 func newStructEncoder(t reflect.Type) encoderFunc {
-	var toArray bool
-	fields := []field{}
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		tag := f.Tag.Get("cbor")
-		if tag == "-" {
-			continue
-		}
-
-		// parse tag
-		var omitempty bool
-		var keyasint bool
-		name, tag, _ := strings.Cut(tag, ",")
-		for tag != "" {
-			var opt string
-			opt, tag, _ = strings.Cut(tag, ",")
-			switch opt {
-			case "omitempty":
-				omitempty = true
-			case "keyasint":
-				keyasint = true
-			case "toarray":
-				if f.Name == "_" {
-					toArray = true
-				}
-			}
-		}
-
-		if !f.IsExported() {
-			continue
-		}
-
-		var encodedKey []byte
-		if keyasint {
-			key, err := strconv.ParseInt(name, 10, 64)
-			if err != nil {
-				// TODO: return error
-				panic(err)
-			}
-			encodedKey, err = Marshal(key)
-			if err != nil {
-				// TODO: return error
-				panic(err)
-			}
-		} else {
-			var err error
-			if name == "" {
-				name = f.Name
-			}
-			encodedKey, err = Marshal(name)
-			if err != nil {
-				// TODO: return error
-				panic(err)
-			}
-		}
-
-		fields = append(fields, field{
-			encodedKey: encodedKey,
-			omitempty:  omitempty,
-			index:      f.Index,
-		})
-	}
-	se := structEncoder{
-		fields: fields,
-	}
-	if toArray {
+	st := cachedStructType(t)
+	se := structEncoder{st}
+	if st.toArray {
 		return se.encodeAsArray
 	} else {
 		return se.encodeAsMap
