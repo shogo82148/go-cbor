@@ -560,6 +560,20 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		return nil
 
 	case 0xc3:
+		if u != nil {
+			return u.UnmarshalCBOR(d.data[start:d.off])
+		}
+		var b []byte
+		if err := d.decode(&b); err != nil {
+			return err
+		}
+		switch v.Type() {
+		case bigIntType.Elem():
+			i := v.Addr().Interface().(*big.Int)
+			i.SetBytes(b)
+			i.Sub(minusOne, i)
+		}
+		return nil
 
 	case 0xd8:
 		n, err := d.readByte()

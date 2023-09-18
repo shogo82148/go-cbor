@@ -758,6 +758,18 @@ func TestUnmarshal_BigInt(t *testing.T) {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
 	})
+
+	t.Run("negative", func(t *testing.T) {
+		input := []byte{0xc3, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+		var got *big.Int
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := newBigInt("-18446744073709551617")
+		if got.Cmp(want) != 0 {
+			t.Errorf("Unmarshal() = %x, want %x", got, want)
+		}
+	})
 }
 
 func typeOf[T any]() reflect.Type {

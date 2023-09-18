@@ -18,6 +18,8 @@ var simpleType = reflect.TypeOf(Simple(0))
 var tagType = reflect.TypeOf(Tag{})
 var undefinedType = reflect.TypeOf(Undefined)
 
+var minusOne = big.NewInt(-1)
+
 type undefined *struct{}
 
 var Undefined undefined = nil
