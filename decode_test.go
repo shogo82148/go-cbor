@@ -846,7 +846,7 @@ func TestUnmarshal_BigInt(t *testing.T) {
 }
 
 func TestUnmarshal_BigFloat(t *testing.T) {
-	t.Run("positive", func(t *testing.T) {
+	t.Run("decode", func(t *testing.T) {
 		input := []byte{
 			0xc5, // Tag 5
 			0x82, // Array of length 2
@@ -856,6 +856,28 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		var got *big.Float
 		if err := Unmarshal(input, &got); err != nil {
 			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := newBigFloat("1.5")
+		if got.Cmp(want) != 0 {
+			t.Errorf("Unmarshal() = %x, want %x", got, want)
+		}
+	})
+
+	t.Run("decode to any", func(t *testing.T) {
+		input := []byte{
+			0xc5, // Tag 5
+			0x82, // Array of length 2
+			0x20, // -1
+			0x03, // 3
+		}
+		var v any
+		if err := Unmarshal(input, &v); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		got, ok := v.(*big.Float)
+		if !ok {
+			t.Errorf("Unmarshal() = %T, want *big.Float", v)
+			return
 		}
 		want := newBigFloat("1.5")
 		if got.Cmp(want) != 0 {

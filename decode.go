@@ -593,7 +593,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 			return err
 		}
 		switch v.Type() {
-		case bigIntType.Elem():
+		case bigIntType:
 			i := v.Addr().Interface().(*big.Int)
 			i.SetBytes(b)
 		}
@@ -610,7 +610,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 			return err
 		}
 		switch v.Type() {
-		case bigIntType.Elem():
+		case bigIntType:
 			i := v.Addr().Interface().(*big.Int)
 			i.SetBytes(b)
 			i.Sub(minusOne, i)
@@ -1707,9 +1707,18 @@ func (d *decodeState) decodeBigFloat(start int, v reflect.Value) error {
 		mant = big.NewInt(x)
 	}
 
-	f := v.Addr().Interface().(*big.Float)
+	var f *big.Float
+	if v.Type() == bigFloatType {
+		// reuse the existing big.Float
+		f = v.Addr().Interface().(*big.Float)
+	} else {
+		f = new(big.Float)
+	}
 	f.SetInt(mant)
 	f.SetMantExp(f, int(exp))
+	if v.Type() != bigFloatType {
+		return d.setAny(start, "bigfloat", f, v)
+	}
 	return nil
 }
 

@@ -12,7 +12,8 @@ import (
 
 var anySliceType = reflect.TypeOf([]any(nil))
 var anyType = reflect.TypeOf((*any)(nil)).Elem()
-var bigIntType = reflect.TypeOf((*big.Int)(nil))
+var bigFloatType = reflect.TypeOf((*big.Float)(nil)).Elem()
+var bigIntType = reflect.TypeOf((*big.Int)(nil)).Elem()
 var byteType = reflect.TypeOf(byte(0))
 var integerType = reflect.TypeOf(Integer{})
 var simpleType = reflect.TypeOf(Simple(0))
