@@ -81,8 +81,6 @@ func (s *encodeState) encode(v any) error {
 		return s.encodeBool(v)
 	case nil:
 		return s.encodeNull()
-	case undefined:
-		return s.encodeUndefined()
 	case []byte:
 		return s.encodeBytes(v)
 	case string:
@@ -166,6 +164,8 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return tagEncoder
 	case simpleType:
 		return simpleEncoder
+	case undefinedType:
+		return undefinedEncoder
 	}
 
 	switch t.Kind() {
@@ -269,6 +269,11 @@ func simpleEncoder(e *encodeState, v reflect.Value) error {
 	}
 	return nil
 
+}
+
+func undefinedEncoder(e *encodeState, v reflect.Value) error {
+	e.writeByte(0xf7)
+	return nil
 }
 
 func sliceEncoder(e *encodeState, v reflect.Value) error {
@@ -619,11 +624,6 @@ func (s *encodeState) encodeBool(v bool) error {
 
 func (s *encodeState) encodeNull() error {
 	s.writeByte(0xf6) // null
-	return nil
-}
-
-func (s *encodeState) encodeUndefined() error {
-	s.writeByte(0xf7) // undefined
 	return nil
 }
 

@@ -3,9 +3,16 @@ package cbor
 import (
 	"errors"
 	"math"
+	"reflect"
 	"slices"
 	"strconv"
 )
+
+var integerType = reflect.TypeOf(Integer{})
+var anySliceType = reflect.TypeOf([]any(nil))
+var simpleType = reflect.TypeOf(Simple(0))
+var tagType = reflect.TypeOf(Tag{})
+var undefinedType = reflect.TypeOf(Undefined)
 
 type undefined *struct{}
 
