@@ -92,14 +92,14 @@ func TestDecoder_UserAnyKey(t *testing.T) {
 			0xf4, 0x08, // false
 		}
 		want := map[any]any{
-			10:          1,
-			100:         2,
-			-1:          3,
-			"z":         4,
-			"aa":        5,
-			[1]int{100}: 6,
-			[1]int{-1}:  7,
-			false:       8,
+			int64(10):          int64(1),
+			int64(100):         int64(2),
+			int64(-1):          int64(3),
+			"z":                int64(4),
+			"aa":               int64(5),
+			[1]any{int64(100)}: int64(6),
+			[1]any{int64(-1)}:  int64(7),
+			false:              int64(8),
 		}
 
 		r := bytes.NewReader(input)

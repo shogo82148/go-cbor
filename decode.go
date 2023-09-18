@@ -82,9 +82,10 @@ func newDecodeState(data []byte) *decodeState {
 }
 
 type decodeState struct {
-	data []byte
-	off  int // next read offset
-	err  error
+	data         []byte
+	off          int // next read offset
+	err          error
+	decodingKeys bool // whether we're decoding a map key (as opposed to a map value)
 
 	useAnyKey bool
 }
@@ -93,6 +94,7 @@ func (d *decodeState) init(data []byte) {
 	d.data = data
 	d.off = 0
 	d.err = nil
+	d.decodingKeys = false
 }
 
 func (s *decodeState) readByte() (byte, error) {
@@ -152,7 +154,7 @@ func (s *decodeState) isAvailable(n uint64) bool {
 	return newOffset <= len(s.data)
 }
 
-func (s *decodeState) saveError(err error) {
+func (s *decodeState) saveError(err *UnmarshalTypeError) {
 	if s.err == nil {
 		s.err = err
 	}
@@ -958,13 +960,19 @@ func (d *decodeState) decodeArray(start int, n uint64, u Unmarshaler, v reflect.
 		if v.NumMethod() != 0 {
 			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
 		}
-		s := reflect.MakeSlice(anySliceType, int(n), int(n))
-		v.Set(s)
+		var s reflect.Value
+		if d.decodingKeys {
+			// slices cannot be used as map keys; fall back to array.
+			s = reflect.New(reflect.ArrayOf(int(n), anyType)).Elem()
+		} else {
+			s = reflect.MakeSlice(anySliceType, int(n), int(n))
+		}
 		for i := 0; i < int(n); i++ {
 			if err := d.decodeReflectValue(s.Index(i)); err != nil {
 				return err
 			}
 		}
+		v.Set(s)
 
 	case reflect.Struct:
 		st := cachedStructType(v.Type())
@@ -1129,6 +1137,10 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
 
+	if d.decodingKeys {
+		return d.newSyntaxError("cbor: unexpected map key")
+	}
+
 	switch v.Kind() {
 	case reflect.Map:
 		if v.IsNil() {
@@ -1137,10 +1149,16 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 		kt := v.Type().Key()
 		et := v.Type().Elem()
 		for i := 0; i < int(n); i++ {
+			// decode the key.
+			d.decodingKeys = true
 			key := reflect.New(kt).Elem()
-			if err := d.decodeReflectValue(key); err != nil {
+			err := d.decodeReflectValue(key)
+			d.decodingKeys = false
+			if err != nil {
 				return err
 			}
+
+			// decode the element.
 			elem := reflect.New(et).Elem()
 			if err := d.decodeReflectValue(elem); err != nil {
 				return err
@@ -1156,10 +1174,14 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 		if d.useAnyKey {
 			m := map[any]any{}
 			for i := 0; i < int(n); i++ {
+				d.decodingKeys = true
 				var key any
-				if err := d.decode(&key); err != nil {
+				err := d.decode(&key)
+				d.decodingKeys = false
+				if err != nil {
 					return err
 				}
+
 				var elem any
 				if err := d.decode(&elem); err != nil {
 					return err
@@ -1170,10 +1192,14 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 		} else {
 			m := map[string]any{}
 			for i := 0; i < int(n); i++ {
+				d.decodingKeys = true
 				var key string
-				if err := d.decode(&key); err != nil {
+				err := d.decode(&key)
+				d.decodingKeys = false
+				if err != nil {
 					return err
 				}
+
 				var elem any
 				if err := d.decode(&elem); err != nil {
 					return err
@@ -1187,7 +1213,10 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 		st := cachedStructType(v.Type())
 		for i := 0; i < int(n); i++ {
 			var key any
-			if err := d.decode(&key); err != nil {
+			d.decodingKeys = true
+			err := d.decode(&key)
+			d.decodingKeys = false
+			if err != nil {
 				return err
 			}
 			if f, ok := st.maps[key]; ok {
@@ -1227,6 +1256,11 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 		}
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
+
+	if d.decodingKeys {
+		return d.newSyntaxError("cbor: unexpected map key")
+	}
+
 	switch v.Kind() {
 	case reflect.Map:
 		if v.IsNil() {
@@ -1245,7 +1279,10 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 			}
 
 			key := reflect.New(kt).Elem()
-			if err := d.decodeReflectValue(key); err != nil {
+			d.decodingKeys = true
+			err = d.decodeReflectValue(key)
+			d.decodingKeys = false
+			if err != nil {
 				return err
 			}
 			elem := reflect.New(et).Elem()
@@ -1273,9 +1310,13 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 				}
 
 				var key any
-				if err := d.decode(&key); err != nil {
+				d.decodingKeys = true
+				err = d.decode(&key)
+				d.decodingKeys = false
+				if err != nil {
 					return err
 				}
+
 				var elem any
 				if err := d.decode(&elem); err != nil {
 					return err
@@ -1286,6 +1327,7 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 		} else {
 			m := map[string]any{}
 			for {
+				// find the end of the map
 				typ, err := d.peekByte()
 				if err != nil {
 					return err
@@ -1295,10 +1337,16 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 					break
 				}
 
+				// decode the key
 				var key string
-				if err := d.decode(&key); err != nil {
+				d.decodingKeys = true
+				err = d.decode(&key)
+				d.decodingKeys = false
+				if err != nil {
 					return err
 				}
+
+				// decode the element
 				var elem any
 				if err := d.decode(&elem); err != nil {
 					return err
@@ -1321,7 +1369,10 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 			}
 
 			var key any
-			if err := d.decode(&key); err != nil {
+			d.decodingKeys = true
+			err = d.decode(&key)
+			d.decodingKeys = false
+			if err != nil {
 				return err
 			}
 			if f, ok := st.maps[key]; ok {
