@@ -141,8 +141,11 @@ func typeEncoder(t reflect.Type) encoderFunc {
 var bigIntType = reflect.TypeOf((*big.Int)(nil))
 
 func newTypeEncoder(t reflect.Type) encoderFunc {
-	if t == bigIntType {
+	switch t {
+	case bigIntType:
 		return bigIntEncoder
+	case tagType:
+		return tagEncoder
 	}
 
 	switch t.Kind() {
@@ -206,6 +209,27 @@ func bigIntEncoder(e *encodeState, v reflect.Value) error {
 		x.Sub(x, i)
 		return e.encodeBytes(x.Bytes())
 	}
+}
+
+func tagEncoder(e *encodeState, v reflect.Value) error {
+	tag := v.Interface().(Tag)
+	switch {
+	case tag.Number < 24:
+		e.writeByte(byte(0xc0 + tag.Number))
+	case tag.Number < 0x100:
+		e.writeByte(0xd8)
+		e.writeByte(byte(tag.Number))
+	case tag.Number < 0x10000:
+		e.writeByte(0xd9)
+		e.writeUint16(uint16(tag.Number))
+	case tag.Number < 0x100000000:
+		e.writeByte(0xda)
+		e.writeUint32(uint32(tag.Number))
+	default:
+		e.writeByte(0xdb)
+		e.writeUint64(uint64(tag.Number))
+	}
+	return e.encode(tag.Content)
 }
 
 func sliceEncoder(e *encodeState, v reflect.Value) error {
