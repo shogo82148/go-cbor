@@ -69,8 +69,8 @@ func Unmarshal(data []byte, v any) error {
 	if err := d.decode(v); err != nil {
 		return err
 	}
-	if d.err != nil {
-		return d.err
+	if d.savedError != nil {
+		return d.savedError
 	}
 	return nil
 }
@@ -81,11 +81,18 @@ func newDecodeState(data []byte) *decodeState {
 	return d
 }
 
+// An errorContext provides context for type errors during decoding.
+type errorContext struct {
+	Struct     reflect.Type
+	FieldStack []string
+}
+
 type decodeState struct {
 	data         []byte
 	off          int // next read offset
-	err          error
+	savedError   error
 	decodingKeys bool // whether we're decoding a map key (as opposed to a map value)
+	errorContext *errorContext
 
 	useAnyKey bool
 }
@@ -93,7 +100,12 @@ type decodeState struct {
 func (d *decodeState) init(data []byte) {
 	d.data = data
 	d.off = 0
-	d.err = nil
+	d.savedError = nil
+	if d.errorContext != nil {
+		d.errorContext.Struct = nil
+		// Reuse the allocated space for the FieldStack slice.
+		d.errorContext.FieldStack = d.errorContext.FieldStack[:0]
+	}
 	d.decodingKeys = false
 }
 
@@ -141,23 +153,34 @@ func (s *decodeState) readUint64() (uint64, error) {
 }
 
 // isAvailable reports whether n bytes are available.
-func (s *decodeState) isAvailable(n uint64) bool {
+func (d *decodeState) isAvailable(n uint64) bool {
 	if n > math.MaxInt {
 		// int(n) will overflow
 		return false
 	}
-	newOffset := s.off + int(n)
-	if newOffset < s.off {
+	newOffset := d.off + int(n)
+	if newOffset < d.off {
 		// overflow
 		return false
 	}
-	return newOffset <= len(s.data)
+	return newOffset <= len(d.data)
 }
 
-func (s *decodeState) saveError(err *UnmarshalTypeError) {
-	if s.err == nil {
-		s.err = err
+func (d *decodeState) saveError(err error) {
+	if d.savedError == nil {
+		d.savedError = d.addErrorContext(err)
 	}
+}
+
+func (d *decodeState) addErrorContext(err error) error {
+	if ctx := d.errorContext; ctx != nil && (ctx.Struct != nil || len(ctx.FieldStack) > 0) {
+		switch err := err.(type) {
+		case *UnmarshalTypeError:
+			err.Struct = ctx.Struct.Name()
+			err.Field = strings.Join(ctx.FieldStack, ".")
+		}
+	}
+	return err
 }
 
 // indirect walks down v allocating pointers as needed,
@@ -1220,24 +1243,47 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 		}
 
 	case reflect.Struct:
-		st := cachedStructType(v.Type())
+		// save original error context
+		var origErrorContext errorContext
+		if d.errorContext != nil {
+			origErrorContext = *d.errorContext
+		} else {
+			d.errorContext = new(errorContext)
+		}
+
+		t := v.Type()
+		st := cachedStructType(t)
 		for i := 0; i < int(n); i++ {
 			var key any
 			d.decodingKeys = true
 			err := d.decode(&key)
 			d.decodingKeys = false
 			if err != nil {
-				return err
+				d.saveError(err)
+				break
 			}
 			if f, ok := st.maps[key]; ok {
+				d.errorContext.Struct = t
+				d.errorContext.FieldStack = append(d.errorContext.FieldStack, f.name)
 				if err := d.decodeReflectValue(v.FieldByIndex(f.index)); err != nil {
-					return err
+					d.saveError(err)
+					break
 				}
 			} else {
 				if err := d.checkWellFormedChild(); err != nil {
-					return err
+					d.saveError(err)
+					break
 				}
 			}
+		}
+
+		// restore original error context
+		if d.errorContext != nil {
+			// Reset errorContext to its original state.
+			// Keep the same underlying array for FieldStack, to reuse the
+			// space and avoid unnecessary allocs.
+			d.errorContext.FieldStack = d.errorContext.FieldStack[:len(origErrorContext.FieldStack)]
+			d.errorContext.Struct = origErrorContext.Struct
 		}
 
 	default:
@@ -1367,7 +1413,16 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 		}
 
 	case reflect.Struct:
-		st := cachedStructType(v.Type())
+		// save original error context
+		var origErrorContext errorContext
+		if d.errorContext != nil {
+			origErrorContext = *d.errorContext
+		} else {
+			d.errorContext = new(errorContext)
+		}
+
+		t := v.Type()
+		st := cachedStructType(t)
 		for {
 			typ, err := d.peekByte()
 			if err != nil {
@@ -1383,17 +1438,31 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 			err = d.decode(&key)
 			d.decodingKeys = false
 			if err != nil {
-				return err
+				d.saveError(err)
+				break
 			}
 			if f, ok := st.maps[key]; ok {
+				d.errorContext.Struct = t
+				d.errorContext.FieldStack = append(d.errorContext.FieldStack, f.name)
 				if err := d.decodeReflectValue(v.FieldByIndex(f.index)); err != nil {
-					return err
+					d.saveError(err)
+					break
 				}
 			} else {
 				if err := d.checkWellFormedChild(); err != nil {
-					return err
+					d.saveError(err)
+					break
 				}
 			}
+		}
+
+		// restore original error context
+		if d.errorContext != nil {
+			// Reset errorContext to its original state.
+			// Keep the same underlying array for FieldStack, to reuse the
+			// space and avoid unnecessary allocs.
+			d.errorContext.FieldStack = d.errorContext.FieldStack[:len(origErrorContext.FieldStack)]
+			d.errorContext.Struct = origErrorContext.Struct
 		}
 
 	default:

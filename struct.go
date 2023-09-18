@@ -27,6 +27,7 @@ type structType struct {
 }
 
 type field struct {
+	name       string
 	key        any
 	encodedKey []byte
 	omitempty  bool
@@ -98,6 +99,7 @@ func newStructType(t reflect.Type) *structType {
 		}
 
 		fields = append(fields, field{
+			name:       f.Name,
 			key:        key,
 			encodedKey: encodedKey,
 			omitempty:  omitempty,
