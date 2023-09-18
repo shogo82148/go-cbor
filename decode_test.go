@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -744,6 +745,20 @@ func TestUnmarshal_Unmarshaler(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnmarshal_Time(t *testing.T) {
+	t.Run("rfc3339", func(t *testing.T) {
+		input := []byte{0xc0, 0x74, 0x32, 0x30, 0x31, 0x33, 0x2d, 0x30, 0x33, 0x2d, 0x32, 0x31, 0x54, 0x32, 0x30, 0x3a, 0x30, 0x34, 0x3a, 0x30, 0x30, 0x5a}
+		var got time.Time
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := time.Date(2013, 3, 21, 20, 4, 0, 0, time.UTC)
+		if !got.Equal(want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
 }
 
 func TestUnmarshal_BigInt(t *testing.T) {
