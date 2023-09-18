@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -540,13 +541,52 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		return d.decodeMapIndefinite(start, u, v)
 
 	// tags
-	case 0xc0, 0xc1, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
+	case 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
 		n := TagNumber(typ - 0xc0)
 		return d.decodeTag(start, n, u, v)
 
+	// tag 0: Standard date/time string
+	case 0xc0:
+		if u != nil || v.Type() == tagType {
+			n := TagNumber(typ - 0xc0)
+			return d.decodeTag(start, n, u, v)
+		}
+		var s string
+		if err := d.decode(&s); err != nil {
+			return err
+		}
+		t, err := time.Parse(time.RFC3339Nano, s)
+		if err != nil {
+			return err
+		}
+		return d.setAny(start, "time", t, v)
+
+	// tag 1: Epoch-based date/time
+	case 0xc1:
+		if u != nil || v.Type() == tagType {
+			n := TagNumber(typ - 0xc0)
+			return d.decodeTag(start, n, u, v)
+		}
+		var epoch any
+		if err := d.decode(&epoch); err != nil {
+			return err
+		}
+
+		var t time.Time
+		switch epoch := epoch.(type) {
+		case int64:
+			t = time.Unix(epoch, 0)
+		case float64:
+			i, f := math.Modf(epoch)
+			t = time.Unix(int64(i), int64(f*1e9))
+		}
+		return d.setAny(start, "time", t, v)
+
+	// tag 2: Unsigned bignum
 	case 0xc2:
-		if u != nil {
-			return u.UnmarshalCBOR(d.data[start:d.off])
+		if u != nil || v.Type() == tagType {
+			n := TagNumber(typ - 0xc0)
+			return d.decodeTag(start, n, u, v)
 		}
 		var b []byte
 		if err := d.decode(&b); err != nil {
@@ -559,9 +599,11 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return nil
 
+	// tag 3: Negative bignum
 	case 0xc3:
-		if u != nil {
-			return u.UnmarshalCBOR(d.data[start:d.off])
+		if u != nil || v.Type() == tagType {
+			n := TagNumber(typ - 0xc0)
+			return d.decodeTag(start, n, u, v)
 		}
 		var b []byte
 		if err := d.decode(&b); err != nil {
@@ -682,6 +724,20 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.decodeFloat64(start, uint64(w), v)
 	}
+	return nil
+}
+
+func (d *decodeState) setAny(start int, value string, w any, v reflect.Value) error {
+	rw := reflect.ValueOf(w)
+	if rw.Type() == v.Type() {
+		v.Set(rw)
+		return nil
+	}
+	if v.Kind() == reflect.Interface && rw.Type().Implements(v.Type()) {
+		v.Set(rw)
+		return nil
+	}
+	d.saveError(&UnmarshalTypeError{Value: value, Type: v.Type(), Offset: int64(start)})
 	return nil
 }
 

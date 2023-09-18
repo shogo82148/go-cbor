@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -607,20 +608,20 @@ var unmarshalTests = []struct {
 	{
 		"tag 1 integer",
 		[]byte{0xc1, 0x1a, 0x51, 0x4b, 0x67, 0xb0},
-		new(any),
-		ptr(any(Tag{
+		new(Tag),
+		&Tag{
 			Number:  1,
 			Content: int64(1363896240),
-		})),
+		},
 	},
 	{
 		"tag 1 float",
 		[]byte{0xc1, 0xfb, 0x41, 0xd4, 0x52, 0xd9, 0xec, 0x20, 0x00, 0x00},
-		new(any),
-		ptr(any(Tag{
+		new(Tag),
+		&Tag{
 			Number:  1,
 			Content: float64(1363896240.5),
-		})),
+		},
 	},
 	{
 		"tag 23",
@@ -744,6 +745,78 @@ func TestUnmarshal_Unmarshaler(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnmarshal_Time(t *testing.T) {
+	t.Run("rfc3339", func(t *testing.T) {
+		input := []byte{0xc0, 0x74, 0x32, 0x30, 0x31, 0x33, 0x2d, 0x30, 0x33, 0x2d, 0x32, 0x31, 0x54, 0x32, 0x30, 0x3a, 0x30, 0x34, 0x3a, 0x30, 0x30, 0x5a}
+		var got time.Time
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := time.Date(2013, 3, 21, 20, 4, 0, 0, time.UTC)
+		if !got.Equal(want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("rfc3339 to any", func(t *testing.T) {
+		input := []byte{0xc0, 0x74, 0x32, 0x30, 0x31, 0x33, 0x2d, 0x30, 0x33, 0x2d, 0x32, 0x31, 0x54, 0x32, 0x30, 0x3a, 0x30, 0x34, 0x3a, 0x30, 0x30, 0x5a}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		tt, ok := got.(time.Time)
+		if !ok {
+			t.Fatal("got is not a time.Time")
+		}
+		want := time.Date(2013, 3, 21, 20, 4, 0, 0, time.UTC)
+		if !tt.Equal(want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("rfc3339 to interface", func(t *testing.T) {
+		input := []byte{0xc0, 0x74, 0x32, 0x30, 0x31, 0x33, 0x2d, 0x30, 0x33, 0x2d, 0x32, 0x31, 0x54, 0x32, 0x30, 0x3a, 0x30, 0x34, 0x3a, 0x30, 0x30, 0x5a}
+		var got interface {
+			Unix() int64
+		}
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		tt, ok := got.(time.Time)
+		if !ok {
+			t.Fatal("got is not a time.Time")
+		}
+		want := time.Date(2013, 3, 21, 20, 4, 0, 0, time.UTC)
+		if !tt.Equal(want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("integer epoch", func(t *testing.T) {
+		input := []byte{0xc1, 0x1a, 0x51, 0x4b, 0x67, 0xb0}
+		var got time.Time
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := time.Unix(1363896240, 0)
+		if !got.Equal(want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("float epoch", func(t *testing.T) {
+		input := []byte{0xc1, 0xfb, 0x41, 0xd4, 0x52, 0xd9, 0xec, 0x20, 0x00, 0x00}
+		var got time.Time
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := time.Unix(1363896240, 500000000)
+		if !got.Equal(want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
 }
 
 func TestUnmarshal_BigInt(t *testing.T) {

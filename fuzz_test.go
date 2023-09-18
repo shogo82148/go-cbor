@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	gocmp "github.com/google/go-cmp/cmp"
 )
@@ -70,6 +71,12 @@ func deepEqualRV(rx, ry reflect.Value) bool {
 	if rx.Type() != ry.Type() {
 		return false
 	}
+
+	switch rx.Type() {
+	case timeType:
+		return rx.Interface().(time.Time).Equal(ry.Interface().(time.Time))
+	}
+
 	switch rx.Kind() {
 	case reflect.Float32, reflect.Float64:
 		// we can't use == operator because NaN != NaN
