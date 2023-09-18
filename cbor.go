@@ -91,6 +91,15 @@ func (i Integer) String() string {
 	}
 }
 
+// BigInt returns the integer as *big.Int.
+func (i Integer) BigInt() *big.Int {
+	v := new(big.Int).SetUint64(i.Value)
+	if i.Sign {
+		v.Sub(minusOne, v)
+	}
+	return v
+}
+
 // Simple is a CBOR simple type.
 type Simple byte
 

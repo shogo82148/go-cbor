@@ -1685,7 +1685,7 @@ func (d *decodeState) decodeBigFloat(start int, v reflect.Value) error {
 		return err
 	}
 	if len(a) != 2 {
-		return errors.New("TODO: implement")
+		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
 	}
 	var exp int64
 	switch x := a[0].(type) {
@@ -1698,13 +1698,20 @@ func (d *decodeState) decodeBigFloat(start int, v reflect.Value) error {
 			return err
 		}
 	default:
-		return errors.New("TODO: implement")
+		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
 	}
 
 	var mant *big.Int
 	switch x := a[1].(type) {
 	case int64:
 		mant = big.NewInt(x)
+	case Integer:
+		mant = x.BigInt()
+	case *big.Int:
+		mant = x
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
+		return nil
 	}
 
 	var f *big.Float
