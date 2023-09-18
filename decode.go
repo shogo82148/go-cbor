@@ -85,6 +85,8 @@ type decodeState struct {
 	data []byte
 	off  int // next read offset
 	err  error
+
+	useAnyKey bool
 }
 
 func (d *decodeState) init(data []byte) {
@@ -1151,19 +1153,35 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 			d.saveError(&UnmarshalTypeError{Value: "map", Type: v.Type(), Offset: int64(start)})
 		}
 
-		m := map[string]any{}
-		for i := 0; i < int(n); i++ {
-			var key string
-			if err := d.decode(&key); err != nil {
-				return err
+		if d.useAnyKey {
+			m := map[any]any{}
+			for i := 0; i < int(n); i++ {
+				var key any
+				if err := d.decode(&key); err != nil {
+					return err
+				}
+				var elem any
+				if err := d.decode(&elem); err != nil {
+					return err
+				}
+				m[key] = elem
 			}
-			var elem any
-			if err := d.decode(&elem); err != nil {
-				return err
+			v.Set(reflect.ValueOf(m))
+		} else {
+			m := map[string]any{}
+			for i := 0; i < int(n); i++ {
+				var key string
+				if err := d.decode(&key); err != nil {
+					return err
+				}
+				var elem any
+				if err := d.decode(&elem); err != nil {
+					return err
+				}
+				m[key] = elem
 			}
-			m[key] = elem
+			v.Set(reflect.ValueOf(m))
 		}
-		v.Set(reflect.ValueOf(m))
 
 	case reflect.Struct:
 		st := cachedStructType(v.Type())
@@ -1242,28 +1260,53 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 			d.saveError(&UnmarshalTypeError{Value: "map", Type: v.Type(), Offset: int64(start)})
 		}
 
-		m := map[string]any{}
-		for {
-			typ, err := d.peekByte()
-			if err != nil {
-				return err
-			}
-			if typ == 0xff {
-				d.off++
-				break
-			}
+		if d.useAnyKey {
+			m := map[any]any{}
+			for {
+				typ, err := d.peekByte()
+				if err != nil {
+					return err
+				}
+				if typ == 0xff {
+					d.off++
+					break
+				}
 
-			var key string
-			if err := d.decode(&key); err != nil {
-				return err
+				var key any
+				if err := d.decode(&key); err != nil {
+					return err
+				}
+				var elem any
+				if err := d.decode(&elem); err != nil {
+					return err
+				}
+				m[key] = elem
 			}
-			var elem any
-			if err := d.decode(&elem); err != nil {
-				return err
+			v.Set(reflect.ValueOf(m))
+		} else {
+			m := map[string]any{}
+			for {
+				typ, err := d.peekByte()
+				if err != nil {
+					return err
+				}
+				if typ == 0xff {
+					d.off++
+					break
+				}
+
+				var key string
+				if err := d.decode(&key); err != nil {
+					return err
+				}
+				var elem any
+				if err := d.decode(&elem); err != nil {
+					return err
+				}
+				m[key] = elem
 			}
-			m[key] = elem
+			v.Set(reflect.ValueOf(m))
 		}
-		v.Set(reflect.ValueOf(m))
 
 	case reflect.Struct:
 		st := cachedStructType(v.Type())

@@ -36,6 +36,11 @@ func (dec *Decoder) Decode(v any) error {
 	return dec.d.decode(v)
 }
 
+// UseAnyKey allows decoding maps to map[any]any instead of map[string]any.
+func (dec *Decoder) UseAnyKey() {
+	dec.d.useAnyKey = true
+}
+
 func (dec *Decoder) readValue() (n int, err error) {
 	for {
 		dec.d.init(dec.buf[dec.scanp:])
