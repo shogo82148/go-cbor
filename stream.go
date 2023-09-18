@@ -41,6 +41,11 @@ func (dec *Decoder) UseAnyKey() {
 	dec.d.useAnyKey = true
 }
 
+// UseInteger allows decoding integers to Integer instead of int64.
+func (dec *Decoder) UseInteger() {
+	dec.d.useInteger = true
+}
+
 func (dec *Decoder) readValue() (n int, err error) {
 	for {
 		dec.d.init(dec.buf[dec.scanp:])
