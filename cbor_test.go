@@ -89,10 +89,10 @@ func TestInteger_String(t *testing.T) {
 		s string
 	}{
 		{Integer{Sign: false, Value: 0}, "0"},
-		{Integer{Sign: false, Value: math.MaxInt64}, "9223372036854775807"},
+		{Integer{Sign: false, Value: math.MaxUint64}, "18446744073709551615"},
 		{Integer{Sign: true, Value: 0}, "-1"},
-		{Integer{Sign: true, Value: math.MaxInt64 - 1}, "-9223372036854775807"},
-		{Integer{Sign: true, Value: math.MaxInt64}, "-9223372036854775808"},
+		{Integer{Sign: true, Value: math.MaxUint64 - 1}, "-18446744073709551615"},
+		{Integer{Sign: true, Value: math.MaxUint64}, "-18446744073709551616"},
 	}
 
 	for _, tt := range tests {
