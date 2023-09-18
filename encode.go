@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"log"
 	"math"
 	"math/big"
 	"reflect"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -170,6 +173,10 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return mapEncoder
 	case reflect.Interface:
 		return interfaceEncoder
+	case reflect.Ptr:
+		return newPtrEncoder(t)
+	case reflect.Struct:
+		return newStructEncoder(t)
 	}
 	panic("TODO implement")
 }
@@ -297,6 +304,130 @@ func interfaceEncoder(s *encodeState, v reflect.Value) error {
 		return s.encodeNull()
 	}
 	return s.encodeReflectValue(v.Elem())
+}
+
+type ptrEncoder struct {
+	elemEnc encoderFunc
+}
+
+func (pe ptrEncoder) encode(e *encodeState, v reflect.Value) error {
+	if v.IsNil() {
+		return e.encodeNull()
+	}
+	// TODO: check for circular references
+	return pe.elemEnc(e, v.Elem())
+}
+
+func newPtrEncoder(t reflect.Type) encoderFunc {
+	enc := ptrEncoder{typeEncoder(t.Elem())}
+	return enc.encode
+}
+
+type structEncoder struct {
+	fields []field
+}
+
+type field struct {
+	encodedKey []byte
+	omitempty  bool
+	index      []int
+}
+
+func (se structEncoder) encodeAsMap(e *encodeState, v reflect.Value) error {
+	e.writeUint(majorTypeMap, uint64(len(se.fields)))
+	for _, f := range se.fields {
+		fv := v.FieldByIndex(f.index)
+		e.buf.Write(f.encodedKey)
+		if err := e.encodeReflectValue(fv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (se structEncoder) encodeAsArray(e *encodeState, v reflect.Value) error {
+	e.writeUint(majorTypeArray, uint64(len(se.fields)))
+	for _, f := range se.fields {
+		fv := v.FieldByIndex(f.index)
+		if err := e.encodeReflectValue(fv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func newStructEncoder(t reflect.Type) encoderFunc {
+	var toArray bool
+	fields := []field{}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		log.Println(f.Name, f.Type, f.Tag, f.Anonymous)
+		tag := f.Tag.Get("cbor")
+		if tag == "-" {
+			continue
+		}
+
+		// parse tag
+		var omitempty bool
+		var keyasint bool
+		name, tag, _ := strings.Cut(tag, ",")
+		for tag != "" {
+			var opt string
+			opt, tag, _ = strings.Cut(tag, ",")
+			switch opt {
+			case "omitempty":
+				omitempty = true
+			case "keyasint":
+				keyasint = true
+			case "toarray":
+				if f.Name == "_" {
+					toArray = true
+				}
+			}
+		}
+
+		if !f.IsExported() {
+			continue
+		}
+
+		var encodedKey []byte
+		if keyasint {
+			key, err := strconv.ParseInt(name, 10, 64)
+			if err != nil {
+				// TODO: return error
+				panic(err)
+			}
+			encodedKey, err = Marshal(key)
+			if err != nil {
+				// TODO: return error
+				panic(err)
+			}
+		} else {
+			var err error
+			if name == "" {
+				name = f.Name
+			}
+			encodedKey, err = Marshal(name)
+			if err != nil {
+				// TODO: return error
+				panic(err)
+			}
+		}
+
+		fields = append(fields, field{
+			encodedKey: encodedKey,
+			omitempty:  omitempty,
+			index:      f.Index,
+		})
+	}
+	se := structEncoder{
+		fields: fields,
+	}
+	if toArray {
+		return se.encodeAsArray
+	} else {
+		return se.encodeAsMap
+	}
 }
 
 func (s *encodeState) writeByte(v byte) {
