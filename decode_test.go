@@ -843,6 +843,12 @@ func TestUnmarshal_Error(t *testing.T) {
 			new(FooA),
 			&UnmarshalTypeError{Value: "string", Type: typeOf[int](), Offset: 3, Struct: "FooA", Field: "A"},
 		},
+		{
+			"indefinite-length map to struct",
+			[]byte{0xbf, 0x61, 0x41, 0x61, 0x30, 0xff}, // {_ A: "0"}
+			new(FooA),
+			&UnmarshalTypeError{Value: "string", Type: typeOf[int](), Offset: 3, Struct: "FooA", Field: "A"},
+		},
 	}
 
 	for _, tt := range tests {
