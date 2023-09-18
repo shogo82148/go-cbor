@@ -64,9 +64,6 @@ func TestFloat(t *testing.T) {
 func TestFloat_Gen(t *testing.T) {
 	for _, tt := range f64ToBytesTests {
 		input := math.Float64frombits(tt.f64)
-		if math.IsNaN(input) {
-			continue
-		}
 		got, err := Marshal(input)
 		if err != nil {
 			t.Errorf("Marshal() error = %v", err)
