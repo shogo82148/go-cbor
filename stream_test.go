@@ -62,7 +62,7 @@ func TestDecoder(t *testing.T) {
 	}
 }
 
-func TestDecoder_UserAnyKey(t *testing.T) {
+func TestDecoder_UseAnyKey(t *testing.T) {
 	t.Run("number key", func(t *testing.T) {
 		input := []byte{0xa2, 0x01, 0x02, 0x03, 0x04}
 		want := map[any]any{int64(1): int64(2), int64(3): int64(4)}
@@ -159,6 +159,25 @@ func TestDecoder_UserAnyKey(t *testing.T) {
 		var se *SyntaxError
 		if !errors.As(err, &se) {
 			t.Errorf("Decode() should return SyntaxError, got %T", err)
+		}
+	})
+}
+
+func TestDecoder_UseInteger(t *testing.T) {
+	t.Run("integer", func(t *testing.T) {
+		input := []byte{0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+		want := Integer{Sign: true, Value: 18446744073709551615}
+
+		r := bytes.NewReader(input)
+		dec := NewDecoder(r)
+		dec.UseInteger()
+		var got any
+		if err := dec.Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Decode() mismatch (-want +got):\n%s", diff)
 		}
 	})
 }

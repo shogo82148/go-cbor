@@ -94,7 +94,8 @@ type decodeState struct {
 	decodingKeys bool // whether we're decoding a map key (as opposed to a map value)
 	errorContext *errorContext
 
-	useAnyKey bool
+	useAnyKey  bool
+	useInteger bool
 }
 
 func (d *decodeState) init(data []byte) {
@@ -653,6 +654,12 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 }
 
 func (d *decodeState) decodePositiveInt(start int, w uint64, v reflect.Value) error {
+	switch v.Type() {
+	case integerType:
+		v.Set(reflect.ValueOf(Integer{Value: w}))
+		return nil
+	}
+
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if w > math.MaxInt64 || v.OverflowInt(int64(w)) {
@@ -667,17 +674,19 @@ func (d *decodeState) decodePositiveInt(start int, w uint64, v reflect.Value) er
 		}
 		v.SetUint(uint64(w))
 	case reflect.Interface:
-		if v.NumMethod() != 0 || w > math.MaxInt64 {
+		if v.NumMethod() != 0 {
 			d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 			break
 		}
-		v.Set(reflect.ValueOf(int64(w)))
-	case reflect.Struct:
-		if v.Type() != integerType {
-			d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
-			break
+		if d.useInteger {
+			v.Set(reflect.ValueOf(Integer{Value: w}))
+		} else {
+			if w > math.MaxInt64 {
+				d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
+				break
+			}
+			v.Set(reflect.ValueOf(int64(w)))
 		}
-		v.Set(reflect.ValueOf(Integer{Value: w}))
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 	}
@@ -685,6 +694,12 @@ func (d *decodeState) decodePositiveInt(start int, w uint64, v reflect.Value) er
 }
 
 func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) error {
+	switch v.Type() {
+	case integerType:
+		v.Set(reflect.ValueOf(Integer{Sign: true, Value: w}))
+		return nil
+	}
+
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i := int64(^w)
@@ -693,18 +708,20 @@ func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) er
 		}
 		v.SetInt(i)
 	case reflect.Interface:
-		i := int64(^w)
-		if v.NumMethod() != 0 || i >= 0 {
+		if v.NumMethod() != 0 {
 			d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 			break
 		}
-		v.Set(reflect.ValueOf(i))
-	case reflect.Struct:
-		if v.Type() != integerType {
-			d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
-			break
+		if d.useInteger {
+			v.Set(reflect.ValueOf(Integer{Sign: true, Value: w}))
+		} else {
+			i := int64(^w)
+			if i >= 0 {
+				d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
+				break
+			}
+			v.Set(reflect.ValueOf(i))
 		}
-		v.Set(reflect.ValueOf(Integer{Sign: true, Value: w}))
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
 	}

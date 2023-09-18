@@ -8,13 +8,13 @@ import (
 	"strconv"
 )
 
-var integerType = reflect.TypeOf(Integer{})
-var anyType = reflect.TypeOf((*any)(nil)).Elem()
 var anySliceType = reflect.TypeOf([]any(nil))
+var anyType = reflect.TypeOf((*any)(nil)).Elem()
+var byteType = reflect.TypeOf(byte(0))
+var integerType = reflect.TypeOf(Integer{})
 var simpleType = reflect.TypeOf(Simple(0))
 var tagType = reflect.TypeOf(Tag{})
 var undefinedType = reflect.TypeOf(Undefined)
-var byteType = reflect.TypeOf(byte(0))
 
 type undefined *struct{}
 
