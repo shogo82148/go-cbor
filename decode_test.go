@@ -2,6 +2,7 @@ package cbor
 
 import (
 	"math"
+	"math/big"
 	"reflect"
 	"testing"
 
@@ -113,20 +114,12 @@ var unmarshalTests = []struct {
 		new(uint64),
 		ptr(uint64(18446744073709551615)),
 	},
-
-	// TODO: 18446744073709551616
-	// We need a big.Int type to represent this value.
-
 	{
 		"-18446744073709551616",
 		[]byte{0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 		new(Integer),
 		&Integer{Sign: true, Value: 18446744073709551615},
 	},
-
-	// TODO: -18446744073709551617
-	// We need a big.Int type to represent this value.
-
 	{
 		"negative one",
 		[]byte{0x20},
@@ -751,6 +744,20 @@ func TestUnmarshal_Unmarshaler(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnmarshal_BigInt(t *testing.T) {
+	t.Run("positive", func(t *testing.T) {
+		input := []byte{0xc2, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+		var got *big.Int
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := newBigInt("18446744073709551616")
+		if got.Cmp(want) != 0 {
+			t.Errorf("Unmarshal() = %x, want %x", got, want)
+		}
+	})
 }
 
 func typeOf[T any]() reflect.Type {
