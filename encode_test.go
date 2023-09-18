@@ -82,7 +82,11 @@ func TestMarshal(t *testing.T) {
 			newBigInt("18446744073709551616"),
 			[]byte{0xc2, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 		},
-		// TODO: -18446744073709551616
+		{
+			"-18446744073709551616",
+			Integer{Sign: true, Value: 18446744073709551615},
+			[]byte{0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		},
 		{
 			"bigint: -18446744073709551617",
 			newBigInt("-18446744073709551617"),
@@ -423,6 +427,11 @@ func TestMarshal(t *testing.T) {
 		{
 			"uint",
 			uint(0),
+			[]byte{0x00},
+		},
+		{
+			"Integer",
+			Integer{Sign: false, Value: 0},
 			[]byte{0x00},
 		},
 

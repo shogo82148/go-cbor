@@ -164,6 +164,8 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return simpleEncoder
 	case undefinedType:
 		return undefinedEncoder
+	case integerType:
+		return integerEncoder
 	}
 
 	switch t.Kind() {
@@ -218,6 +220,16 @@ func stringEncoder(e *encodeState, v reflect.Value) error {
 
 func bytesEncoder(e *encodeState, v reflect.Value) error {
 	return e.encodeBytes(v.Bytes())
+}
+
+func integerEncoder(e *encodeState, v reflect.Value) error {
+	i := v.Interface().(Integer)
+	if i.Sign {
+		e.writeUint(majorTypeNegativeInt, i.Value)
+	} else {
+		e.writeUint(majorTypePositiveInt, i.Value)
+	}
+	return nil
 }
 
 func bigIntEncoder(e *encodeState, v reflect.Value) error {
