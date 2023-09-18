@@ -284,7 +284,7 @@ func TestMarshal(t *testing.T) {
 		},
 		{
 			"byte string",
-			[]byte(""),
+			[]byte{},
 			[]byte{0x40},
 		},
 		{
