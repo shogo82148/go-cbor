@@ -1202,7 +1202,16 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 		v.Set(reflect.ValueOf(Tag{Number: n, Content: content}))
 		return nil
 	}
-	d.saveError(&UnmarshalTypeError{Value: "tag", Type: v.Type(), Offset: int64(start)})
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.NumMethod() != 0 {
+			d.saveError(&UnmarshalTypeError{Value: "tag", Type: v.Type(), Offset: int64(start)})
+			break
+		}
+		v.Set(reflect.ValueOf(Tag{Number: n, Content: content}))
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "tag", Type: v.Type(), Offset: int64(start)})
+	}
 	return nil
 }
 
