@@ -764,7 +764,7 @@ func (d *decodeState) decodeBytes(start int, n uint64, u Unmarshaler, v reflect.
 }
 
 func (d *decodeState) decodeBytesIndefinite(start int, u Unmarshaler, v reflect.Value) error {
-	var s []byte
+	s := []byte{}
 
 LOOP:
 	for {

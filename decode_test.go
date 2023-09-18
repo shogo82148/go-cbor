@@ -579,6 +579,18 @@ var unmarshalTests = []struct {
 		ptr(any(float64(0))),
 	},
 	{
+		"decode empty byte string to any",
+		[]byte{0x40},
+		new(any),
+		ptr(any([]byte{})),
+	},
+	{
+		"decode indefinite-length empty byte string to any",
+		[]byte{0x5f, 0xff},
+		new(any),
+		ptr(any([]byte{})),
+	},
+	{
 		"decode byte string to any",
 		[]byte{0x44, 0x01, 0x02, 0x03, 0x04},
 		new(any),
