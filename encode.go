@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"log"
 	"math"
 	"math/big"
 	"reflect"
@@ -107,6 +106,24 @@ func (s *encodeState) encodeReflectValue(v reflect.Value) error {
 		return s.encodeNull()
 	}
 	return typeEncoder(v.Type())(s, v)
+}
+
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Pointer:
+		return v.IsNil()
+	}
+	return false
 }
 
 type encoderFunc func(e *encodeState, v reflect.Value) error
@@ -334,9 +351,22 @@ type field struct {
 }
 
 func (se structEncoder) encodeAsMap(e *encodeState, v reflect.Value) error {
-	e.writeUint(majorTypeMap, uint64(len(se.fields)))
+	// count number of fields to encode
+	var l int
 	for _, f := range se.fields {
 		fv := v.FieldByIndex(f.index)
+		if f.omitempty && isEmptyValue(fv) {
+			continue
+		}
+		l++
+	}
+
+	e.writeUint(majorTypeMap, uint64(l))
+	for _, f := range se.fields {
+		fv := v.FieldByIndex(f.index)
+		if f.omitempty && isEmptyValue(fv) {
+			continue
+		}
 		e.buf.Write(f.encodedKey)
 		if err := e.encodeReflectValue(fv); err != nil {
 			return err
@@ -361,7 +391,6 @@ func newStructEncoder(t reflect.Type) encoderFunc {
 	fields := []field{}
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
-		log.Println(f.Name, f.Type, f.Tag, f.Anonymous)
 		tag := f.Tag.Get("cbor")
 		if tag == "-" {
 			continue
