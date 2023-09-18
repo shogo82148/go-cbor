@@ -30,7 +30,7 @@ func (dec *Decoder) Decode(v any) error {
 	if err != nil {
 		return err
 	}
-	dec.d.init(dec.buf[:n])
+	dec.d.init(dec.buf[dec.scanp : dec.scanp+n])
 	dec.scanp += n
 
 	return dec.d.decode(v)
