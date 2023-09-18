@@ -566,6 +566,28 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 	// tag 1: Epoch-based date/time
 	case 0xc1:
+		if u != nil {
+			n := TagNumber(typ - 0xc0)
+			return d.decodeTag(start, n, u, v)
+		}
+		var epoch any
+		if err := d.decode(&epoch); err != nil {
+			return err
+		}
+
+		var t time.Time
+		switch epoch := epoch.(type) {
+		case int64:
+			t = time.Unix(epoch, 0)
+		case float64:
+			i, f := math.Modf(epoch)
+			t = time.Unix(int64(i), int64(f*1e9))
+		}
+
+		switch v.Type() {
+		case timeType:
+			v.Set(reflect.ValueOf(t))
+		}
 
 	// tag 2: Unsigned bignum
 	case 0xc2:
