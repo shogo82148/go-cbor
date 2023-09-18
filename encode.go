@@ -535,9 +535,9 @@ func (s *encodeState) encodeFloat64(v float64) error {
 			s.writeByte(0x00)
 			return nil
 		} else if frac&0x8000000000000 != 0 {
-			// qNaN in float16
+			// NaN in float16
 			s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
-			f16 := uint16(sign<<15 | 0x7c00 | frac>>42)
+			f16 := uint16(0x7e00)
 			s.writeUint16(f16)
 			return nil
 		}
