@@ -20,6 +20,17 @@ type FooA struct {
 	B string
 }
 
+type FooB struct {
+	Alg int    `cbor:"1,keyasint,omitempty"`
+	Kit []byte `cbor:"4,keyasint,omitempty"`
+}
+
+type FooC struct {
+	_ struct{} `cbor:",toarray"`
+	A int
+	B string
+}
+
 func TestMarshal(t *testing.T) {
 	tests := []struct {
 		name string
@@ -473,9 +484,14 @@ func TestMarshal(t *testing.T) {
 
 		// struct
 		{
-			"struct",
+			"struct a",
 			&FooA{A: 1, B: "2"},
 			[]byte{0xa2, 0x61, 0x41, 0x01, 0x61, 0x42, 0x61, 0x32},
+		},
+		{
+			"struct b",
+			&FooB{Alg: 42, Kit: []byte("kit")},
+			[]byte{0xa2, 0x01, 0x18, 0x2a, 0x04, 0x43, 0x6b, 0x69, 0x74},
 		},
 	}
 	for _, tt := range tests {

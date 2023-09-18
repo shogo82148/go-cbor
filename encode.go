@@ -8,6 +8,8 @@ import (
 	"math/big"
 	"reflect"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -325,17 +327,16 @@ type structEncoder struct {
 }
 
 type field struct {
-	name  string
-	index []int
+	encodedKey []byte
+	omitempty  bool
+	index      []int
 }
 
 func (se structEncoder) encode(e *encodeState, v reflect.Value) error {
 	e.writeUint(majorTypeMap, uint64(len(se.fields)))
 	for _, f := range se.fields {
 		fv := v.FieldByIndex(f.index)
-		if err := e.encode(f.name); err != nil {
-			return err
-		}
+		e.buf.Write(f.encodedKey)
 		if err := e.encodeReflectValue(fv); err != nil {
 			return err
 		}
@@ -347,9 +348,54 @@ func newStructEncoder(t reflect.Type) encoderFunc {
 	fields := []field{}
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
+		tag := f.Tag.Get("cbor")
+		if tag == "-" {
+			continue
+		}
+
+		// parse tag
+		var omitempty bool
+		var keyasint bool
+		name, tag, _ := strings.Cut(tag, ",")
+		for tag != "" {
+			var opt string
+			opt, tag, _ = strings.Cut(tag, ",")
+			switch opt {
+			case "omitempty":
+				omitempty = true
+			case "keyasint":
+				keyasint = true
+			}
+		}
+
+		var encodedKey []byte
+		if keyasint {
+			key, err := strconv.ParseInt(name, 10, 64)
+			if err != nil {
+				// TODO: return error
+				panic(err)
+			}
+			encodedKey, err = Marshal(key)
+			if err != nil {
+				// TODO: return error
+				panic(err)
+			}
+		} else {
+			var err error
+			if name == "" {
+				name = f.Name
+			}
+			encodedKey, err = Marshal(name)
+			if err != nil {
+				// TODO: return error
+				panic(err)
+			}
+		}
+
 		fields = append(fields, field{
-			name:  f.Name,
-			index: f.Index,
+			encodedKey: encodedKey,
+			omitempty:  omitempty,
+			index:      f.Index,
 		})
 	}
 	se := structEncoder{
