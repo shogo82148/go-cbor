@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"log"
 	"math"
 	"math/big"
 	"reflect"
@@ -332,7 +333,7 @@ type field struct {
 	index      []int
 }
 
-func (se structEncoder) encode(e *encodeState, v reflect.Value) error {
+func (se structEncoder) encodeAsMap(e *encodeState, v reflect.Value) error {
 	e.writeUint(majorTypeMap, uint64(len(se.fields)))
 	for _, f := range se.fields {
 		fv := v.FieldByIndex(f.index)
@@ -344,10 +345,23 @@ func (se structEncoder) encode(e *encodeState, v reflect.Value) error {
 	return nil
 }
 
+func (se structEncoder) encodeAsArray(e *encodeState, v reflect.Value) error {
+	e.writeUint(majorTypeArray, uint64(len(se.fields)))
+	for _, f := range se.fields {
+		fv := v.FieldByIndex(f.index)
+		if err := e.encodeReflectValue(fv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func newStructEncoder(t reflect.Type) encoderFunc {
+	var toArray bool
 	fields := []field{}
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
+		log.Println(f.Name, f.Type, f.Tag, f.Anonymous)
 		tag := f.Tag.Get("cbor")
 		if tag == "-" {
 			continue
@@ -365,7 +379,15 @@ func newStructEncoder(t reflect.Type) encoderFunc {
 				omitempty = true
 			case "keyasint":
 				keyasint = true
+			case "toarray":
+				if f.Name == "_" {
+					toArray = true
+				}
 			}
+		}
+
+		if !f.IsExported() {
+			continue
 		}
 
 		var encodedKey []byte
@@ -401,7 +423,11 @@ func newStructEncoder(t reflect.Type) encoderFunc {
 	se := structEncoder{
 		fields: fields,
 	}
-	return se.encode
+	if toArray {
+		return se.encodeAsArray
+	} else {
+		return se.encodeAsMap
+	}
 }
 
 func (s *encodeState) writeByte(v byte) {

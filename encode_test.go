@@ -493,6 +493,11 @@ func TestMarshal(t *testing.T) {
 			&FooB{Alg: 42, Kit: []byte("kit")},
 			[]byte{0xa2, 0x01, 0x18, 0x2a, 0x04, 0x43, 0x6b, 0x69, 0x74},
 		},
+		{
+			"struct c",
+			&FooC{A: 1, B: "2"},
+			[]byte{0x82, 0x01, 0x61, 0x32},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
