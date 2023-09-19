@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"reflect"
@@ -16,6 +17,17 @@ import (
 type CBORMarshaler interface {
 	// MarshalCBOR returns the CBOR encoding of the receiver.
 	MarshalCBOR() ([]byte, error)
+}
+
+// An UnsupportedValueError is returned by Marshal when attempting
+// to encode an unsupported value.
+type UnsupportedValueError struct {
+	Value reflect.Value
+	Str   string
+}
+
+func (e *UnsupportedValueError) Error() string {
+	return "cbor: unsupported value: " + e.Str
 }
 
 type majorType byte
@@ -41,12 +53,24 @@ func Marshal(v any) ([]byte, error) {
 }
 
 func newEncodeState() *encodeState {
-	return &encodeState{}
+	return &encodeState{
+		ptrSeen: make(map[any]struct{}),
+	}
 }
 
 type encodeState struct {
 	buf bytes.Buffer
+
+	// Keep track of what pointers we've seen in the current recursive call
+	// path, to avoid cycles that could lead to a stack overflow. Only do
+	// the relatively expensive map operations if ptrLevel is larger than
+	// startDetectingCyclesAfter, so that we skip the work if we're within a
+	// reasonable amount of nested pointers deep.
+	ptrLevel uint
+	ptrSeen  map[any]struct{}
 }
+
+const startDetectingCyclesAfter = 1000
 
 func (s *encodeState) encode(v any) error {
 	// fast path for basic types
@@ -387,8 +411,21 @@ func (pe ptrEncoder) encode(e *encodeState, v reflect.Value) error {
 	if v.IsNil() {
 		return e.encodeNull()
 	}
-	// TODO: check for circular references
-	return pe.elemEnc(e, v.Elem())
+
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.Interface()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
+	}
+
+	err := pe.elemEnc(e, v.Elem())
+	e.ptrLevel--
+	return err
 }
 
 func newPtrEncoder(t reflect.Type) encoderFunc {
