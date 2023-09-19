@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	gocmp "github.com/google/go-cmp/cmp"
 )
@@ -43,6 +44,38 @@ func FuzzUnmarshal(f *testing.F) {
 		}
 		if diff := gocmp.Diff(b, c); diff != "" {
 			t.Errorf("Marshal() mismatch (-want +got):\n%s", diff)
+		}
+	})
+}
+
+func FuzzMarshal_string(f *testing.F) {
+	f.Add("")
+	f.Add("\uFDDD")
+	f.Add("a\xffb")
+	f.Add("a\xffb\uFFFD")
+	f.Add("a☺\xffb☺\xC0\xAFc☺\xff")
+	f.Add("\xC0\xAF")
+	f.Add("\xE0\x80\xAF")
+	f.Add("\xed\xa0\x80")
+	f.Add("\xed\xbf\xbf")
+	f.Add("\xF0\x80\x80\xaf")
+	f.Add("\xF8\x80\x80\x80\xAF")
+	f.Add("\xFC\x80\x80\x80\x80\xAF")
+
+	f.Fuzz(func(t *testing.T, s string) {
+		data, err := Marshal(s)
+		if err != nil {
+			t.Error(err)
+		}
+
+		var v string
+		if err := Unmarshal(data, &v); err != nil {
+			t.Error(err)
+		}
+
+		// Marshal always encodes strings as valid UTF-8 strings.
+		if !utf8.ValidString(v) {
+			t.Errorf("%q: invalid UTF-8 string: %q", s, v)
 		}
 	})
 }
