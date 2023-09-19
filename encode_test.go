@@ -33,6 +33,22 @@ func TestMarshal_Cycles(t *testing.T) {
 	}
 }
 
+func TestMarshal_UnsupportedType(t *testing.T) {
+	tests := []any{
+		func() {},
+		chan int(nil),
+		complex(1, 2),
+	}
+
+	for _, v := range tests {
+		_, err := Marshal(v)
+		_, ok := err.(*UnsupportedTypeError)
+		if !ok {
+			t.Errorf("expected error, got nil")
+		}
+	}
+}
+
 func newBigInt(s string) *big.Int {
 	i := new(big.Int)
 	if _, ok := i.SetString(s, 0); !ok {
