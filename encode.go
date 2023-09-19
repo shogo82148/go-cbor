@@ -213,7 +213,7 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 	case base64URLStringType:
 		return newBase64Encoder(tagNumberBase64URL, base64.RawURLEncoding.Strict())
 	case encodedData:
-		// TODO: implement
+		return encodedDataEncoder
 	case expectedBase16Type:
 		return newExpectedEncoder(tagNumberExpectedBase16, t)
 	case expectedBase64Type:
@@ -383,6 +383,18 @@ func newBase64Encoder(n TagNumber, enc *base64.Encoding) encoderFunc {
 		e.buf.WriteString(data)
 		return nil
 	}
+}
+
+func encodedDataEncoder(e *encodeState, v reflect.Value) error {
+	// write tag number 24: encoded CBOR data item
+	e.writeByte(0xd8)
+	e.writeByte(byte(tagNumberEncodedData))
+
+	// write data
+	data := v.Bytes()
+	e.writeUint(majorTypeBytes, uint64(len(data)))
+	e.buf.Write(data)
+	return nil
 }
 
 func newExpectedEncoder(n TagNumber, t reflect.Type) encoderFunc {

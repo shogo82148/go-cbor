@@ -143,6 +143,7 @@ const (
 	tagNumberExpectedBase64URL TagNumber = 21
 	tagNumberExpectedBase64    TagNumber = 22
 	tagNumberExpectedBase16    TagNumber = 23
+	tagNumberEncodedData       TagNumber = 24
 
 	tagNumberURI          TagNumber = 32
 	tagNumberBase64URL    TagNumber = 33
