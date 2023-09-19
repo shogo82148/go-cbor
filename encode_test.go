@@ -451,6 +451,13 @@ func TestMarshal(t *testing.T) {
 			[]byte{0xf9, 0x00, 0x00},
 		},
 
+		// big float
+		{
+			"Bigfloat",
+			newBigFloat("1.5"),
+			[]byte{0xc5, 0x82, 0x02, 0xc2, 0x41, 0x03},
+		},
+
 		// marshaler
 		{
 			"marshaler",

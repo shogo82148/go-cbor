@@ -157,6 +157,8 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 	switch t {
 	case bigIntType:
 		return bigIntEncoder
+	case bigFloatType:
+		return bigFloatEncoder
 	case tagType:
 		return tagEncoder
 	case simpleType:
@@ -244,6 +246,32 @@ func bigIntEncoder(e *encodeState, v reflect.Value) error {
 		x.Sub(x, i)
 		return e.encodeBytes(x.Bytes())
 	}
+}
+
+func bigFloatEncoder(e *encodeState, v reflect.Value) error {
+	// breaks into exponent and mantissa
+	f := v.Addr().Interface().(*big.Float)
+	mant := new(big.Float)
+	exp := f.MantExp(mant)
+
+	// convert mantissa to integer
+	prec := mant.MinPrec()
+	n, _ := mant.SetMantExp(mant, int(prec)).Int(new(big.Int))
+
+	e.writeByte(0xc5) // tag 5: Bigfloat
+	e.writeByte(0x82) // array of length 2
+
+	// encode exponent
+	e.encodeInt(int64(exp) + int64(prec) - 1)
+
+	// encode mantissa
+	if n.Sign() >= 0 {
+		e.writeByte(0xc2) // tag 2: positive bigint
+	} else {
+		e.writeByte(0xc3) // tag 3: negative bigint
+		n.Sub(minusOne, n)
+	}
+	return e.encodeBytes(n.Bytes())
 }
 
 func tagEncoder(e *encodeState, v reflect.Value) error {
