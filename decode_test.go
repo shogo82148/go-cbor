@@ -663,6 +663,17 @@ var unmarshalTests = []struct {
 		ptr(any(Simple(255))),
 	},
 
+	// self-describe CBOR
+	{
+		"self-describe CBOR",
+		[]byte{
+			0xd9, 0xd9, 0xf7, // tag 55799: self-describe CBOR
+			0x64, 0x49, 0x45, 0x54, 0x46, // "IETF"
+		},
+		new(any),
+		ptr(any("IETF")),
+	},
+
 	// decode to struct
 	{
 		"map to struct a",

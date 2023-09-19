@@ -643,6 +643,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		d.decodeBigFloat(start, v)
 
+	// 1 bytes of tag number follow
 	case 0xd8:
 		n, err := d.readByte()
 		if err != nil {
@@ -650,6 +651,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.decodeTag(start, TagNumber(n), u, v)
 
+	// 2 bytes of tag number follow
 	case 0xd9:
 		n, err := d.readUint16()
 		if err != nil {
@@ -657,6 +659,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.decodeTag(start, TagNumber(n), u, v)
 
+	// 4 bytes of tag number follow
 	case 0xda:
 		n, err := d.readUint32()
 		if err != nil {
@@ -664,6 +667,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.decodeTag(start, TagNumber(n), u, v)
 
+	// 8 bytes of tag number follow
 	case 0xdb:
 		n, err := d.readUint64()
 		if err != nil {
@@ -1648,6 +1652,13 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 			return err
 		}
 		return u.UnmarshalCBOR(d.data[start:d.off])
+	}
+
+	// Self-Described CBOR
+	if n == tagNumberSelfDescribe {
+		// RFC 8949 Section 3.4.6.
+		// It does not impart any special semantics on the data item that it encloses.
+		return d.decodeReflectValue(v)
 	}
 
 	var content any

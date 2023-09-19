@@ -106,6 +106,8 @@ type Simple byte
 // TagNumber is a CBOR tag number type.
 type TagNumber uint64
 
+const tagNumberSelfDescribe = 55799
+
 // Tag is a CBOR tag.
 type Tag struct {
 	Number  TagNumber
