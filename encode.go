@@ -19,6 +19,16 @@ type CBORMarshaler interface {
 	MarshalCBOR() ([]byte, error)
 }
 
+// An UnsupportedTypeError is returned by Marshal when attempting
+// to encode an unsupported value type.
+type UnsupportedTypeError struct {
+	Type reflect.Type
+}
+
+func (e *UnsupportedTypeError) Error() string {
+	return "cbor: unsupported type: " + e.Type.String()
+}
+
 // An UnsupportedValueError is returned by Marshal when attempting
 // to encode an unsupported value.
 type UnsupportedValueError struct {
@@ -222,8 +232,9 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return newPtrEncoder(t)
 	case reflect.Struct:
 		return newStructEncoder(t)
+	default:
+		return unsupportedTypeEncoder
 	}
-	panic("TODO implement")
 }
 
 func boolEncoder(e *encodeState, v reflect.Value) error {
@@ -491,6 +502,10 @@ func newStructEncoder(t reflect.Type) encoderFunc {
 	} else {
 		return se.encodeAsMap
 	}
+}
+
+func unsupportedTypeEncoder(e *encodeState, v reflect.Value) error {
+	return &UnsupportedTypeError{v.Type()}
 }
 
 func (s *encodeState) writeByte(v byte) {
