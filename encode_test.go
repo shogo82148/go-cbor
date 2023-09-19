@@ -451,11 +451,108 @@ func TestMarshal(t *testing.T) {
 			[]byte{0xf9, 0x00, 0x00},
 		},
 
-		// big float
+		// bigint
 		{
-			"Bigfloat",
+			"bigint zero",
+			newBigInt("0"),
+			[]byte{0x00},
+		},
+		{
+			"bigint one",
+			newBigInt("1"),
+			[]byte{0x01},
+		},
+		{
+			"bigint ten",
+			newBigInt("10"),
+			[]byte{0x0a},
+		},
+		{
+			"bigint twenty-three",
+			newBigInt("23"),
+			[]byte{0x17},
+		},
+		{
+			"bigint twenty-four",
+			newBigInt("24"),
+			[]byte{0x18, 0x18},
+		},
+		{
+			"bigint twenty-five",
+			newBigInt("25"),
+			[]byte{0x18, 0x19},
+		},
+		{
+			"bigint one hundred",
+			newBigInt("100"),
+			[]byte{0x18, 0x64},
+		},
+		{
+			"bigint one thousand",
+			newBigInt("1000"),
+			[]byte{0x19, 0x03, 0xe8},
+		},
+		{
+			"bigint one million",
+			newBigInt("1000000"),
+			[]byte{0x1a, 0x00, 0x0f, 0x42, 0x40},
+		},
+		{
+			"bigint 1_000_000_000_000",
+			newBigInt("1000000000000"),
+			[]byte{0x1b, 0x00, 0x00, 0x00, 0xe8, 0xd4, 0xa5, 0x10, 0x00},
+		},
+		{
+			"bigint maximum 64-bit unsigned integer",
+			newBigInt("18446744073709551615"),
+			[]byte{0x1b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		},
+		{
+			"bigint2: 18446744073709551616",
+			newBigInt("18446744073709551616"),
+			[]byte{0xc2, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			"bigint -18446744073709551616",
+			newBigInt("-18446744073709551616"),
+			[]byte{0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		},
+		{
+			"bigint2: -18446744073709551617",
+			newBigInt("-18446744073709551617"),
+			[]byte{0xc3, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			"bigint negative one",
+			newBigInt("-1"),
+			[]byte{0x20},
+		},
+		{
+			"bigint negative ten",
+			newBigInt("-10"),
+			[]byte{0x29},
+		},
+		{
+			"bigint negative one hundred",
+			newBigInt("-100"),
+			[]byte{0x38, 0x63},
+		},
+		{
+			"bigint negative one thousand",
+			newBigInt("-1000"),
+			[]byte{0x39, 0x03, 0xe7},
+		},
+
+		// bigfloat
+		{
+			"Bigfloat 1.5",
 			newBigFloat("1.5"),
-			[]byte{0xc5, 0x82, 0x02, 0xc2, 0x41, 0x03},
+			[]byte{0xf9, 0x3e, 0x00},
+		},
+		{
+			"Bigfloat 0.1",
+			newBigFloat("0.1"),
+			[]byte{0xc5, 0x82, 0x18, 0x3c, 0x1b, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcd},
 		},
 
 		// marshaler

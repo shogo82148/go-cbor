@@ -235,43 +235,24 @@ func integerEncoder(e *encodeState, v reflect.Value) error {
 	return nil
 }
 
+var minInteger *big.Int
+
+func init() {
+	minInteger = new(big.Int)
+	if _, ok := minInteger.SetString("-18446744073709551616", 10); !ok {
+		panic("failed to parse minInteger")
+	}
+}
+
 func bigIntEncoder(e *encodeState, v reflect.Value) error {
 	i := v.Addr().Interface().(*big.Int)
-	if i.Sign() >= 0 {
-		e.writeByte(0xc2) // tag 2: positive bigint
-		return e.encodeBytes(i.Bytes())
-	} else {
-		e.writeByte(0xc3) // tag 3: negative bigint
-		x := big.NewInt(-1)
-		x.Sub(x, i)
-		return e.encodeBytes(x.Bytes())
-	}
+	return e.encodeBigInt(i)
 }
 
 func bigFloatEncoder(e *encodeState, v reflect.Value) error {
 	// breaks into exponent and mantissa
 	f := v.Addr().Interface().(*big.Float)
-	mant := new(big.Float)
-	exp := f.MantExp(mant)
-
-	// convert mantissa to integer
-	prec := mant.MinPrec()
-	n, _ := mant.SetMantExp(mant, int(prec)).Int(new(big.Int))
-
-	e.writeByte(0xc5) // tag 5: Bigfloat
-	e.writeByte(0x82) // array of length 2
-
-	// encode exponent
-	e.encodeInt(int64(exp) + int64(prec) - 1)
-
-	// encode mantissa
-	if n.Sign() >= 0 {
-		e.writeByte(0xc2) // tag 2: positive bigint
-	} else {
-		e.writeByte(0xc3) // tag 3: negative bigint
-		n.Sub(minusOne, n)
-	}
-	return e.encodeBytes(n.Bytes())
+	return e.encodeBigFloat(f)
 }
 
 func tagEncoder(e *encodeState, v reflect.Value) error {
@@ -604,16 +585,67 @@ func (s *encodeState) encodeNull() error {
 	return nil
 }
 
-func (s *encodeState) encodeBytes(v []byte) error {
+func (e *encodeState) encodeBytes(v []byte) error {
 	l := len(v)
-	s.writeUint(majorTypeBytes, uint64(l))
-	s.buf.Write(v)
+	e.writeUint(majorTypeBytes, uint64(l))
+	e.buf.Write(v)
 	return nil
 }
 
-func (s *encodeState) encodeString(v string) error {
+func (e *encodeState) encodeString(v string) error {
 	l := len(v)
-	s.writeUint(majorTypeString, uint64(l))
-	s.buf.WriteString(v)
+	e.writeUint(majorTypeString, uint64(l))
+	e.buf.WriteString(v)
 	return nil
+}
+
+func (e *encodeState) encodeBigInt(i *big.Int) error {
+	// encode as int if possible
+	if i.IsUint64() {
+		return e.encodeUint(i.Uint64())
+	}
+	if i.IsInt64() {
+		return e.encodeInt(i.Int64())
+	}
+	if i.Cmp(minInteger) == 0 {
+		e.writeUint(majorTypeNegativeInt, 1<<64-1)
+		return nil
+	}
+
+	// encode as bigint
+	if i.Sign() >= 0 {
+		e.writeByte(0xc2) // tag 2: positive bigint
+		return e.encodeBytes(i.Bytes())
+	} else {
+		e.writeByte(0xc3) // tag 3: negative bigint
+		x := big.NewInt(-1)
+		x.Sub(x, i)
+		return e.encodeBytes(x.Bytes())
+	}
+}
+
+func (e *encodeState) encodeBigFloat(f *big.Float) error {
+	// encode as float if possible
+	f64, acc := f.Float64()
+	if acc == big.Exact {
+		return e.encodeFloat64(f64)
+	}
+
+	mant := new(big.Float)
+	exp := f.MantExp(mant)
+
+	// convert mantissa to integer
+	prec := mant.MinPrec()
+	n, _ := mant.SetMantExp(mant, int(prec)).Int(new(big.Int))
+
+	e.writeByte(0xc5) // tag 5: Bigfloat
+	e.writeByte(0x82) // array of length 2
+
+	// encode exponent
+	if err := e.encodeInt(int64(exp) + int64(prec) - 1); err != nil {
+		return err
+	}
+
+	// encode mantissa
+	return e.encodeBigInt(n)
 }
