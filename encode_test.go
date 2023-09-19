@@ -382,6 +382,23 @@ func TestMarshal(t *testing.T) {
 			},
 		},
 
+		// nils
+		{
+			"any type nil",
+			any(nil),
+			[]byte{0xf6},
+		},
+		{
+			"map type nil",
+			map[string]any(nil),
+			[]byte{0xf6},
+		},
+		{
+			"slice type nil",
+			[]any(nil),
+			[]byte{0xf6},
+		},
+
 		// integer types
 		{
 			"int8",
