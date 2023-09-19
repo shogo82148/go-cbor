@@ -817,6 +817,17 @@ func TestUnmarshal_Time(t *testing.T) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
 	})
+
+	// https://github.com/shogo82148/go-cbor/pull/67
+	t.Run("float epoch", func(t *testing.T) {
+		input := []byte{0xc1, 0x44, 0x30, 0x30, 0x30, 0x30}
+		var got time.Time
+		err := Unmarshal(input, &got)
+		_, ok := err.(*UnmarshalTypeError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want UnmarshalTypeError", err)
+		}
+	})
 }
 
 func TestUnmarshal_BigInt(t *testing.T) {
