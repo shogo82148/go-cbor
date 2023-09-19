@@ -576,9 +576,18 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		switch epoch := epoch.(type) {
 		case int64:
 			t = time.Unix(epoch, 0)
+		case Integer:
+			i, err := epoch.Int64()
+			if err != nil {
+				return err
+			}
+			t = time.Unix(i, 0)
 		case float64:
 			i, f := math.Modf(epoch)
 			t = time.Unix(int64(i), int64(f*1e9))
+		default:
+			d.saveError(&UnmarshalTypeError{"number", reflect.TypeOf(epoch), int64(start), "", ""})
+			return nil
 		}
 		return d.setAny(start, "time", t, v)
 
