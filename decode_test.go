@@ -887,14 +887,24 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid length of array", func(t *testing.T) {
-		// RFC 8949 Section 3.4.4.
+	t.Run("long length of array", func(t *testing.T) {
 		input := []byte{
 			0xc5, // Tag 5
 			0x83, // Array of length 3
 			0x20, // -1
 			0x03, // 3
 			0x04, // 4
+		}
+		var v any
+		if err := Unmarshal(input, &v); err == nil {
+			t.Errorf("Unmarshal() error = nil, want error")
+		}
+	})
+
+	t.Run("short length of array", func(t *testing.T) {
+		input := []byte{
+			0xc5, // Tag 5
+			0x80, // Array of length 0
 		}
 		var v any
 		if err := Unmarshal(input, &v); err == nil {
