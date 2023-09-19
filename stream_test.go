@@ -181,3 +181,42 @@ func TestDecoder_UseInteger(t *testing.T) {
 		}
 	})
 }
+
+func TestDecoder_SemanticError(t *testing.T) {
+	t.Run("duplicated map key", func(t *testing.T) {
+		data := []byte{
+			0xa2,             // map of length 2
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+		}
+		r := bytes.NewReader(data)
+
+		var v any
+		dec := NewDecoder(r)
+		dec.UseAnyKey()
+		err := dec.Decode(&v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated indefinite-length map key", func(t *testing.T) {
+		data := []byte{
+			0xbf,             // indefinite-length
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+			0xff, // break
+		}
+		r := bytes.NewReader(data)
+
+		var v any
+		dec := NewDecoder(r)
+		dec.UseAnyKey()
+		err := dec.Decode(&v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+}
