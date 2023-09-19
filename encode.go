@@ -345,22 +345,7 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 	}
 
 	l := v.Len()
-	switch {
-	case l < 0x17:
-		e.writeByte(byte(0x80 + l))
-	case l < 0x100:
-		e.writeByte(0x98)
-		e.writeByte(byte(l))
-	case int64(l) < 0x10000:
-		e.writeByte(0x99)
-		e.writeUint16(uint16(l))
-	case int64(l) < 0x100000000:
-		e.writeByte(0x9a)
-		e.writeUint32(uint32(l))
-	default:
-		e.writeByte(0x9b)
-		e.writeUint64(uint64(l))
-	}
+	e.writeUint(majorTypeArray, uint64(l))
 	for i := 0; i < l; i++ {
 		err := e.encode(v.Index(i).Interface())
 		if err != nil {
