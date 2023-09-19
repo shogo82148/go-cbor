@@ -1686,6 +1686,7 @@ func (d *decodeState) decodeBigFloat(start int, v reflect.Value) error {
 	}
 	if len(a) != 2 {
 		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
+		return nil
 	}
 	var exp int64
 	switch x := a[0].(type) {
@@ -1699,6 +1700,7 @@ func (d *decodeState) decodeBigFloat(start int, v reflect.Value) error {
 		}
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
+		return nil
 	}
 
 	var mant *big.Int
