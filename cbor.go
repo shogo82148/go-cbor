@@ -112,27 +112,6 @@ func (i Integer) BigInt() *big.Int {
 // EncodedData is a CBOR encoded data.
 type EncodedData []byte
 
-// ExpectedBase64URL is data expected to be encoded as base64url with no padding.
-type ExpectedBase64URL struct {
-	Content any
-}
-
-// ExpectedBase64 is data expected to be encoded as base64 with padding.
-type ExpectedBase64 struct {
-	Content any
-}
-
-// ExpectedBase16 is data expected to be encoded as base16.
-type ExpectedBase16 struct {
-	Content any
-}
-
-// Base64String is a base64 with padding encoded data.
-type Base64String string
-
-// Base64URLString is a base64url with no padding encoded string.
-type Base64URLString string
-
 // Simple is a CBOR simple type.
 type Simple byte
 
