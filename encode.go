@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"net/url"
 	"reflect"
 	"slices"
 	"strings"
@@ -204,6 +205,8 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return integerEncoder
 	case timeType:
 		return timeEncoder
+	case urlType:
+		return urlEncoder
 	}
 
 	switch t.Kind() {
@@ -332,6 +335,16 @@ func timeEncoder(e *encodeState, v reflect.Value) error {
 	t := v.Interface().(time.Time)
 	epoch := float64(t.UnixNano()) / 1e9
 	return e.encodeFloat64(epoch)
+}
+
+func urlEncoder(e *encodeState, v reflect.Value) error {
+	u := v.Addr().Interface().(*url.URL)
+	s := u.String()
+	e.writeByte(0xd8)
+	e.writeByte(byte(tagNumberURI)) // tag 32: URI
+	e.writeUint(majorTypeString, uint64(len(s)))
+	e.buf.WriteString(s)
+	return nil
 }
 
 func undefinedEncoder(e *encodeState, v reflect.Value) error {

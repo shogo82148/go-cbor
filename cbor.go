@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"math/big"
+	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
@@ -20,6 +21,7 @@ var simpleType = reflect.TypeOf(Simple(0))
 var tagType = reflect.TypeOf(Tag{})
 var timeType = reflect.TypeOf((*time.Time)(nil)).Elem()
 var undefinedType = reflect.TypeOf(Undefined)
+var urlType = reflect.TypeOf((*url.URL)(nil)).Elem()
 
 var minusOne = big.NewInt(-1)
 
@@ -106,7 +108,12 @@ type Simple byte
 // TagNumber is a CBOR tag number type.
 type TagNumber uint64
 
-const tagNumberSelfDescribe = 55799
+const (
+	tagNumberURI          TagNumber = 32
+	tagNumberBase64URL    TagNumber = 33
+	tagNumberBase64       TagNumber = 34
+	tagNumberSelfDescribe TagNumber = 55799
+)
 
 // Tag is a CBOR tag.
 type Tag struct {

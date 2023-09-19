@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -1326,7 +1327,7 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 				return err
 			}
 			if v.MapIndex(key).IsValid() {
-				return &SemanticError{"cbor: duplicate map key"}
+				return newSemanticError("cbor: duplicate map key")
 			}
 
 			// decode the element.
@@ -1353,7 +1354,7 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 					return err
 				}
 				if _, ok := m[key]; ok {
-					return &SemanticError{"cbor: duplicate map key"}
+					return newSemanticError("cbor: duplicate map key")
 				}
 
 				var elem any
@@ -1374,7 +1375,7 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 					return err
 				}
 				if _, ok := m[key]; ok {
-					return &SemanticError{"cbor: duplicate map key"}
+					return newSemanticError("cbor: duplicate map key")
 				}
 
 				var elem any
@@ -1412,7 +1413,7 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 
 			// check for duplicate keys
 			if _, ok := seen[key]; ok {
-				return &SemanticError{"cbor: duplicate map key"}
+				return newSemanticError("cbor: duplicate map key")
 			}
 			seen[key] = struct{}{}
 
@@ -1497,7 +1498,7 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 				return err
 			}
 			if v.MapIndex(key).IsValid() {
-				return &SemanticError{"cbor: duplicate map key"}
+				return newSemanticError("cbor: duplicate map key")
 			}
 
 			elem := reflect.New(et).Elem()
@@ -1532,7 +1533,7 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 					return err
 				}
 				if _, ok := m[key]; ok {
-					return &SemanticError{"cbor: duplicate map key"}
+					return newSemanticError("cbor: duplicate map key")
 				}
 
 				var elem any
@@ -1564,7 +1565,7 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 					return err
 				}
 				if _, ok := m[key]; ok {
-					return &SemanticError{"cbor: duplicate map key"}
+					return newSemanticError("cbor: duplicate map key")
 				}
 
 				// decode the element
@@ -1611,7 +1612,7 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 			}
 			// check for duplicate keys
 			if _, ok := seen[key]; ok {
-				return &SemanticError{"cbor: duplicate map key"}
+				return newSemanticError("cbor: duplicate map key")
 			}
 			seen[key] = struct{}{}
 
@@ -1654,8 +1655,32 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
 
-	// Self-Described CBOR
-	if n == tagNumberSelfDescribe {
+	if v.Type() == tagType {
+		var content any
+		if err := d.decode(&content); err != nil {
+			return err
+		}
+		v.Set(reflect.ValueOf(Tag{Number: n, Content: content}))
+		return nil
+	}
+
+	// Well-known tags
+	switch n {
+
+	// tag number 32: URI
+	case tagNumberURI:
+		var s string
+		if err := d.decode(&s); err != nil {
+			return err
+		}
+		u, err := url.Parse(s)
+		if err != nil {
+			return wrapSemanticError("cbor: invalid URI", err)
+		}
+		return d.setAny(start, "uri", u, v)
+
+	// tag number 55799 Self-Described CBOR
+	case tagNumberSelfDescribe:
 		// RFC 8949 Section 3.4.6.
 		// It does not impart any special semantics on the data item that it encloses.
 		return d.decodeReflectValue(v)
@@ -1664,10 +1689,6 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 	var content any
 	if err := d.decode(&content); err != nil {
 		return err
-	}
-	if v.Type() == tagType {
-		v.Set(reflect.ValueOf(Tag{Number: n, Content: content}))
-		return nil
 	}
 	switch v.Kind() {
 	case reflect.Interface:
@@ -2267,6 +2288,23 @@ func (d *decodeState) newSyntaxError(msg string) error {
 // SemanticError is a description of a CBOR semantic error.
 type SemanticError struct {
 	msg string
+	err error
 }
 
-func (e *SemanticError) Error() string { return e.msg }
+func newSemanticError(msg string) *SemanticError {
+	return &SemanticError{msg: msg}
+}
+
+func wrapSemanticError(msg string, err error) *SemanticError {
+	return &SemanticError{msg: msg, err: err}
+}
+
+func (e *SemanticError) Error() string {
+	if e.err == nil {
+		return e.msg
+	} else {
+		return e.msg + ": " + e.err.Error()
+	}
+}
+
+func (e *SemanticError) Unwrap() error { return e.err }
