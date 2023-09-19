@@ -2,6 +2,7 @@ package cbor
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -207,6 +208,18 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return timeEncoder
 	case urlType:
 		return urlEncoder
+	case base64StringType:
+		return newBase64Encoder(tagNumberBase64, base64.StdEncoding.Strict())
+	case base64URLStringType:
+		return newBase64Encoder(tagNumberBase64URL, base64.RawURLEncoding.Strict())
+	case encodedData:
+		// TODO: implement
+	case expectedBase16Type:
+		// TODO: implement
+	case expectedBase64Type:
+		// TODO: implement
+	case expectedBase64URLType:
+		// TODO: implement
 	}
 
 	switch t.Kind() {
@@ -340,11 +353,33 @@ func timeEncoder(e *encodeState, v reflect.Value) error {
 func urlEncoder(e *encodeState, v reflect.Value) error {
 	u := v.Addr().Interface().(*url.URL)
 	s := u.String()
+
+	// write tag number 32: URI
 	e.writeByte(0xd8)
-	e.writeByte(byte(tagNumberURI)) // tag 32: URI
+	e.writeByte(byte(tagNumberURI))
+
 	e.writeUint(majorTypeString, uint64(len(s)))
 	e.buf.WriteString(s)
 	return nil
+}
+
+func newBase64Encoder(n TagNumber, enc *base64.Encoding) encoderFunc {
+	return func(e *encodeState, v reflect.Value) error {
+		// validate that the value is a base64 encoded string.
+		data := v.String()
+		if _, err := enc.DecodeString(data); err != nil {
+			return wrapSemanticError("cbor: invalid base64 encoding", err)
+		}
+
+		// write tag number
+		e.writeByte(0xd8)
+		e.writeByte(byte(n))
+
+		// write data
+		e.writeUint(majorTypeString, uint64(len(data)))
+		e.buf.WriteString(data)
+		return nil
+	}
 }
 
 func undefinedEncoder(e *encodeState, v reflect.Value) error {

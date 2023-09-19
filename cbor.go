@@ -13,15 +13,22 @@ import (
 
 var anySliceType = reflect.TypeOf([]any(nil))
 var anyType = reflect.TypeOf((*any)(nil)).Elem()
-var bigFloatType = reflect.TypeOf((*big.Float)(nil)).Elem()
-var bigIntType = reflect.TypeOf((*big.Int)(nil)).Elem()
+var bigFloatType = reflect.TypeOf(big.Float{})
+var bigIntType = reflect.TypeOf(big.Int{})
 var byteType = reflect.TypeOf(byte(0))
 var integerType = reflect.TypeOf(Integer{})
 var simpleType = reflect.TypeOf(Simple(0))
 var tagType = reflect.TypeOf(Tag{})
-var timeType = reflect.TypeOf((*time.Time)(nil)).Elem()
+var timeType = reflect.TypeOf(time.Time{})
 var undefinedType = reflect.TypeOf(Undefined)
-var urlType = reflect.TypeOf((*url.URL)(nil)).Elem()
+var urlType = reflect.TypeOf(url.URL{})
+
+var base64StringType = reflect.TypeOf(Base64String(""))
+var base64URLStringType = reflect.TypeOf(Base64URLString(""))
+var encodedData = reflect.TypeOf(EncodedData(nil))
+var expectedBase16Type = reflect.TypeOf(ExpectedBase16{})
+var expectedBase64Type = reflect.TypeOf(ExpectedBase64{})
+var expectedBase64URLType = reflect.TypeOf(ExpectedBase64URL{})
 
 var minusOne = big.NewInt(-1)
 
@@ -101,6 +108,30 @@ func (i Integer) BigInt() *big.Int {
 	}
 	return v
 }
+
+// EncodedData is a CBOR encoded data.
+type EncodedData []byte
+
+// ExpectedBase64URL is data expected to be encoded as base64url with no padding.
+type ExpectedBase64URL struct {
+	Content any
+}
+
+// ExpectedBase64 is data expected to be encoded as base64 with padding.
+type ExpectedBase64 struct {
+	Content any
+}
+
+// ExpectedBase16 is data expected to be encoded as base16.
+type ExpectedBase16 struct {
+	Content any
+}
+
+// Base64String is a base64 with padding encoded data.
+type Base64String string
+
+// Base64URLString is a base64url with no padding encoded string.
+type Base64URLString string
 
 // Simple is a CBOR simple type.
 type Simple byte
