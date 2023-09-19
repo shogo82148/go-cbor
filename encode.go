@@ -215,11 +215,11 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 	case encodedData:
 		// TODO: implement
 	case expectedBase16Type:
-		// TODO: implement
+		return newExpectedEncoder(tagNumberExpectedBase16, t)
 	case expectedBase64Type:
-		// TODO: implement
+		return newExpectedEncoder(tagNumberExpectedBase64, t)
 	case expectedBase64URLType:
-		// TODO: implement
+		return newExpectedEncoder(tagNumberExpectedBase64URL, t)
 	}
 
 	switch t.Kind() {
@@ -364,6 +364,9 @@ func urlEncoder(e *encodeState, v reflect.Value) error {
 }
 
 func newBase64Encoder(n TagNumber, enc *base64.Encoding) encoderFunc {
+	if n < 32 || n >= 0x100 {
+		panic("invalid tag number")
+	}
 	return func(e *encodeState, v reflect.Value) error {
 		// validate that the value is a base64 encoded string.
 		data := v.String()
@@ -379,6 +382,24 @@ func newBase64Encoder(n TagNumber, enc *base64.Encoding) encoderFunc {
 		e.writeUint(majorTypeString, uint64(len(data)))
 		e.buf.WriteString(data)
 		return nil
+	}
+}
+
+func newExpectedEncoder(n TagNumber, t reflect.Type) encoderFunc {
+	if n >= 24 {
+		panic("invalid tag number")
+	}
+	f, ok := t.FieldByName("Content")
+	if !ok {
+		panic("expected struct does not have Content field")
+	}
+
+	return func(e *encodeState, v reflect.Value) error {
+		// write tag number
+		e.writeByte(0xc0 + byte(n))
+
+		// write data
+		return e.encodeReflectValue(v.FieldByIndex(f.Index))
 	}
 }
 

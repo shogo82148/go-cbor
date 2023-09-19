@@ -140,6 +140,10 @@ type Simple byte
 type TagNumber uint64
 
 const (
+	tagNumberExpectedBase64URL TagNumber = 21
+	tagNumberExpectedBase64    TagNumber = 22
+	tagNumberExpectedBase16    TagNumber = 23
+
 	tagNumberURI          TagNumber = 32
 	tagNumberBase64URL    TagNumber = 33
 	tagNumberBase64       TagNumber = 34
