@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -593,9 +594,9 @@ func (e *encodeState) encodeBytes(v []byte) error {
 }
 
 func (e *encodeState) encodeString(v string) error {
-	l := len(v)
-	e.writeUint(majorTypeString, uint64(l))
-	e.buf.WriteString(v)
+	s := strings.ToValidUTF8(v, "\ufffd")
+	e.writeUint(majorTypeString, uint64(len(s)))
+	e.buf.WriteString(s)
 	return nil
 }
 
