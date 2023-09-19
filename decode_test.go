@@ -1119,6 +1119,105 @@ func TestUnmarshal_InvalidUnmarshalError(t *testing.T) {
 	})
 }
 
+func TestUnmarshal_SemanticError(t *testing.T) {
+	t.Run("duplicated map key decoded to map", func(t *testing.T) {
+		data := []byte{
+			0xa2,             // map of length 2
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+		}
+
+		var v map[string]int
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated map key decoded to any", func(t *testing.T) {
+		data := []byte{
+			0xa2,             // map of length 2
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+		}
+
+		var v any
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated map key decoded to struct", func(t *testing.T) {
+		data := []byte{
+			0xa2,             // map of length 2
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+		}
+
+		var v struct {
+			A int `cbor:"0"`
+		}
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated indefinite-length map key decoded to map", func(t *testing.T) {
+		data := []byte{
+			0xbf,             // indefinite-length
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+			0xff, // break
+		}
+
+		var v map[string]int
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated indefinite-length map key decoded to any", func(t *testing.T) {
+		data := []byte{
+			0xbf,             // indefinite-length
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+			0xff, // break
+		}
+
+		var v any
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated indefinite-length map key decoded to struct", func(t *testing.T) {
+		data := []byte{
+			0xbf,             // indefinite-length
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+			0xff, // break
+		}
+
+		var v struct {
+			A int `cbor:"0"`
+		}
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+}
+
 // RFC 8949 Appendix F
 var notWellFormed = [][]byte{
 	// End of input in a head

@@ -1321,6 +1321,9 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 			if err != nil {
 				return err
 			}
+			if v.MapIndex(key).IsValid() {
+				return &SemanticError{"cbor: duplicate map key"}
+			}
 
 			// decode the element.
 			elem := reflect.New(et).Elem()
@@ -1345,6 +1348,9 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 				if err != nil {
 					return err
 				}
+				if _, ok := m[key]; ok {
+					return &SemanticError{"cbor: duplicate map key"}
+				}
 
 				var elem any
 				if err := d.decode(&elem); err != nil {
@@ -1362,6 +1368,9 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 				d.decodingKeys = false
 				if err != nil {
 					return err
+				}
+				if _, ok := m[key]; ok {
+					return &SemanticError{"cbor: duplicate map key"}
 				}
 
 				var elem any
@@ -1382,9 +1391,12 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 			d.errorContext = new(errorContext)
 		}
 
+		seen := map[any]struct{}{}
+
 		t := v.Type()
 		st := cachedStructType(t)
 		for i := 0; i < int(n); i++ {
+			// decode the key.
 			var key any
 			d.decodingKeys = true
 			err := d.decode(&key)
@@ -1393,6 +1405,14 @@ func (d *decodeState) decodeMap(start int, n uint64, u Unmarshaler, v reflect.Va
 				d.saveError(err)
 				break
 			}
+
+			// check for duplicate keys
+			if _, ok := seen[key]; ok {
+				return &SemanticError{"cbor: duplicate map key"}
+			}
+			seen[key] = struct{}{}
+
+			// decode the element.
 			if f, ok := st.maps[key]; ok {
 				d.errorContext.Struct = t
 				d.errorContext.FieldStack = append(d.errorContext.FieldStack, f.name)
@@ -1472,6 +1492,10 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 			if err != nil {
 				return err
 			}
+			if v.MapIndex(key).IsValid() {
+				return &SemanticError{"cbor: duplicate map key"}
+			}
+
 			elem := reflect.New(et).Elem()
 			if err := d.decodeReflectValue(elem); err != nil {
 				return err
@@ -1503,6 +1527,9 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 				if err != nil {
 					return err
 				}
+				if _, ok := m[key]; ok {
+					return &SemanticError{"cbor: duplicate map key"}
+				}
 
 				var elem any
 				if err := d.decode(&elem); err != nil {
@@ -1532,6 +1559,9 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 				if err != nil {
 					return err
 				}
+				if _, ok := m[key]; ok {
+					return &SemanticError{"cbor: duplicate map key"}
+				}
 
 				// decode the element
 				var elem any
@@ -1552,6 +1582,8 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 			d.errorContext = new(errorContext)
 		}
 
+		seen := map[any]struct{}{}
+
 		t := v.Type()
 		st := cachedStructType(t)
 		for {
@@ -1564,6 +1596,7 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 				break
 			}
 
+			// decode the key.
 			var key any
 			d.decodingKeys = true
 			err = d.decode(&key)
@@ -1572,6 +1605,13 @@ func (d *decodeState) decodeMapIndefinite(start int, u Unmarshaler, v reflect.Va
 				d.saveError(err)
 				break
 			}
+			// check for duplicate keys
+			if _, ok := seen[key]; ok {
+				return &SemanticError{"cbor: duplicate map key"}
+			}
+			seen[key] = struct{}{}
+
+			// decode the element.
 			if f, ok := st.maps[key]; ok {
 				d.errorContext.Struct = t
 				d.errorContext.FieldStack = append(d.errorContext.FieldStack, f.name)
@@ -2212,3 +2252,10 @@ func (e *SyntaxError) Error() string { return e.msg }
 func (d *decodeState) newSyntaxError(msg string) error {
 	return &SyntaxError{msg: msg, Offset: int64(d.off)}
 }
+
+// SemanticError is a description of a CBOR semantic error.
+type SemanticError struct {
+	msg string
+}
+
+func (e *SemanticError) Error() string { return e.msg }
