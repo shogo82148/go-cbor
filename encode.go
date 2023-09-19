@@ -235,8 +235,31 @@ func integerEncoder(e *encodeState, v reflect.Value) error {
 	return nil
 }
 
+var minInteger *big.Int
+
+func init() {
+	minInteger = new(big.Int)
+	if _, ok := minInteger.SetString("-18446744073709551616", 10); !ok {
+		panic("failed to parse minInteger")
+	}
+}
+
 func bigIntEncoder(e *encodeState, v reflect.Value) error {
 	i := v.Addr().Interface().(*big.Int)
+
+	// encode as int if possible
+	if i.IsUint64() {
+		return e.encodeUint(i.Uint64())
+	}
+	if i.IsInt64() {
+		return e.encodeInt(i.Int64())
+	}
+	if i.Cmp(minInteger) == 0 {
+		e.writeUint(majorTypeNegativeInt, 1<<64-1)
+		return nil
+	}
+
+	// encode as bigint
 	if i.Sign() >= 0 {
 		e.writeByte(0xc2) // tag 2: positive bigint
 		return e.encodeBytes(i.Bytes())
@@ -251,6 +274,13 @@ func bigIntEncoder(e *encodeState, v reflect.Value) error {
 func bigFloatEncoder(e *encodeState, v reflect.Value) error {
 	// breaks into exponent and mantissa
 	f := v.Addr().Interface().(*big.Float)
+
+	// encode as float if possible
+	f64, acc := f.Float64()
+	if acc == big.Exact {
+		return e.encodeFloat64(f64)
+	}
+
 	mant := new(big.Float)
 	exp := f.MantExp(mant)
 
