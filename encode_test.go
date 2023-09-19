@@ -24,7 +24,7 @@ func TestMarshal_Cycles(t *testing.T) {
 	sliceCycle := []any{nil}
 	sliceCycle[0] = []any{sliceCycle}
 
-	for _, v := range []any{pointerCycle /*, mapCycle, sliceCycle*/} {
+	for _, v := range []any{pointerCycle, mapCycle, sliceCycle} {
 		_, err := Marshal(v)
 		_, ok := err.(*UnsupportedValueError)
 		if !ok {

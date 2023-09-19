@@ -333,6 +333,17 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 		return e.encodeNull()
 	}
 
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.UnsafePointer()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
+	}
+
 	l := v.Len()
 	switch {
 	case l < 0x17:
@@ -356,6 +367,7 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 			return err
 		}
 	}
+	e.ptrLevel--
 	return nil
 }
 
@@ -368,9 +380,20 @@ func cmpMapKey(a, b mapKey) int {
 	return bytes.Compare(a.encoded, b.encoded)
 }
 
-func mapEncoder(s *encodeState, v reflect.Value) error {
+func mapEncoder(e *encodeState, v reflect.Value) error {
 	if v.IsZero() {
-		return s.encodeNull()
+		return e.encodeNull()
+	}
+
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.UnsafePointer()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
 	}
 
 	l := v.Len()
@@ -385,14 +408,16 @@ func mapEncoder(s *encodeState, v reflect.Value) error {
 	slices.SortFunc(keys, cmpMapKey)
 
 	// encode the length
-	s.writeUint(majorTypeMap, uint64(l))
+	e.writeUint(majorTypeMap, uint64(l))
+
 	for _, key := range keys {
-		s.buf.Write(key.encoded)
+		e.buf.Write(key.encoded)
 		value := v.MapIndex(key.key)
-		if err := s.encodeReflectValue(value); err != nil {
+		if err := e.encodeReflectValue(value); err != nil {
 			return err
 		}
 	}
+	e.ptrLevel--
 	return nil
 }
 
