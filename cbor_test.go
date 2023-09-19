@@ -2,6 +2,7 @@ package cbor
 
 import (
 	"math"
+	"math/big"
 	"testing"
 )
 
@@ -99,6 +100,26 @@ func TestInteger_String(t *testing.T) {
 		got := tt.i.String()
 		if got != tt.s {
 			t.Errorf("Integer.String() = %v, want %v", got, tt.s)
+		}
+	}
+}
+
+func TestInteger_BigInt(t *testing.T) {
+	tests := []struct {
+		i    Integer
+		want *big.Int
+	}{
+		{Integer{Sign: false, Value: 0}, newBigInt("0")},
+		{Integer{Sign: false, Value: math.MaxUint64}, newBigInt("18446744073709551615")},
+		{Integer{Sign: true, Value: 0}, newBigInt("-1")},
+		{Integer{Sign: true, Value: math.MaxUint64 - 1}, newBigInt("-18446744073709551615")},
+		{Integer{Sign: true, Value: math.MaxUint64}, newBigInt("-18446744073709551616")},
+	}
+
+	for _, tt := range tests {
+		got := tt.i.BigInt()
+		if got.Cmp(tt.want) != 0 {
+			t.Errorf("Integer.BigInt() = %v, want %v", got, tt.want)
 		}
 	}
 }

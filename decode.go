@@ -541,7 +541,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		return d.decodeMapIndefinite(start, u, v)
 
 	// tags
-	case 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
+	case 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
 		n := TagNumber(typ - 0xc0)
 		return d.decodeTag(start, n, u, v)
 
@@ -593,7 +593,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 			return err
 		}
 		switch v.Type() {
-		case bigIntType.Elem():
+		case bigIntType:
 			i := v.Addr().Interface().(*big.Int)
 			i.SetBytes(b)
 		}
@@ -610,12 +610,29 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 			return err
 		}
 		switch v.Type() {
-		case bigIntType.Elem():
+		case bigIntType:
 			i := v.Addr().Interface().(*big.Int)
 			i.SetBytes(b)
 			i.Sub(minusOne, i)
 		}
 		return nil
+
+	// tag 4: Decimal fraction
+	case 0xc4:
+		if u != nil || v.Type() == tagType {
+			n := TagNumber(typ - 0xc0)
+			return d.decodeTag(start, n, u, v)
+		}
+
+		return errors.New("TODO: implement")
+
+	// tag 5: Bigfloat
+	case 0xc5:
+		if u != nil || v.Type() == tagType {
+			n := TagNumber(typ - 0xc0)
+			return d.decodeTag(start, n, u, v)
+		}
+		d.decodeBigFloat(start, v)
 
 	case 0xd8:
 		n, err := d.readByte()
@@ -1658,6 +1675,56 @@ func (d *decodeState) setUndefined(start int, v reflect.Value) error {
 		v.Set(reflect.Zero(v.Type()))
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "undefined", Type: v.Type(), Offset: int64(start)})
+	}
+	return nil
+}
+
+func (d *decodeState) decodeBigFloat(start int, v reflect.Value) error {
+	var a []any
+	if err := d.decode(&a); err != nil {
+		return err
+	}
+	if len(a) != 2 {
+		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
+	}
+	var exp int64
+	switch x := a[0].(type) {
+	case int64:
+		exp = x
+	case Integer:
+		var err error
+		exp, err = x.Int64()
+		if err != nil {
+			return err
+		}
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
+	}
+
+	var mant *big.Int
+	switch x := a[1].(type) {
+	case int64:
+		mant = big.NewInt(x)
+	case Integer:
+		mant = x.BigInt()
+	case *big.Int:
+		mant = x
+	default:
+		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
+		return nil
+	}
+
+	var f *big.Float
+	if v.Type() == bigFloatType {
+		// reuse the existing big.Float
+		f = v.Addr().Interface().(*big.Float)
+	} else {
+		f = new(big.Float)
+	}
+	f.SetInt(mant)
+	f.SetMantExp(f, int(exp))
+	if v.Type() != bigFloatType {
+		return d.setAny(start, "bigfloat", f, v)
 	}
 	return nil
 }

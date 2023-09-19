@@ -16,6 +16,14 @@ func newBigInt(s string) *big.Int {
 	return i
 }
 
+func newBigFloat(s string) *big.Float {
+	f := new(big.Float)
+	if _, ok := f.SetString(s); !ok {
+		panic("failed to parse big.Float: " + s)
+	}
+	return f
+}
+
 func TestMarshal(t *testing.T) {
 	tests := []struct {
 		name string

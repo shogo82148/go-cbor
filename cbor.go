@@ -12,7 +12,8 @@ import (
 
 var anySliceType = reflect.TypeOf([]any(nil))
 var anyType = reflect.TypeOf((*any)(nil)).Elem()
-var bigIntType = reflect.TypeOf((*big.Int)(nil))
+var bigFloatType = reflect.TypeOf((*big.Float)(nil)).Elem()
+var bigIntType = reflect.TypeOf((*big.Int)(nil)).Elem()
 var byteType = reflect.TypeOf(byte(0))
 var integerType = reflect.TypeOf(Integer{})
 var simpleType = reflect.TypeOf(Simple(0))
@@ -88,6 +89,15 @@ func (i Integer) String() string {
 	} else {
 		return strconv.FormatUint(i.Value, 10)
 	}
+}
+
+// BigInt returns the integer as *big.Int.
+func (i Integer) BigInt() *big.Int {
+	v := new(big.Int).SetUint64(i.Value)
+	if i.Sign {
+		v.Sub(minusOne, v)
+	}
+	return v
 }
 
 // Simple is a CBOR simple type.

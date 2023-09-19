@@ -234,7 +234,7 @@ func integerEncoder(e *encodeState, v reflect.Value) error {
 }
 
 func bigIntEncoder(e *encodeState, v reflect.Value) error {
-	i := v.Interface().(*big.Int)
+	i := v.Addr().Interface().(*big.Int)
 	if i.Sign() >= 0 {
 		e.writeByte(0xc2) // tag 2: positive bigint
 		return e.encodeBytes(i.Bytes())
