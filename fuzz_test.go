@@ -1,6 +1,7 @@
 package cbor
 
 import (
+	"bytes"
 	"cmp"
 	"fmt"
 	"reflect"
@@ -19,31 +20,100 @@ func FuzzUnmarshal(f *testing.F) {
 		f.Add(tt)
 	}
 
+	types := []func() any{
+		func() any { return new(any) },
+		func() any { return new(map[string]any) },
+		func() any { return new(map[any]any) },
+		func() any { return new([]any) },
+	}
+
 	f.Fuzz(func(t *testing.T, a []byte) {
-		var v any
-		if err := Unmarshal(a, &v); err != nil {
-			return
-		}
+		for _, newv := range types {
+			v := newv()
+			if err := Unmarshal(a, v); err != nil {
+				return
+			}
 
-		b, err := Marshal(v)
-		if err != nil {
-			t.Error(err)
-		}
+			b, err := Marshal(v)
+			if err != nil {
+				t.Error(err)
+			}
 
-		var w any
-		if err := Unmarshal(b, &w); err != nil {
-			t.Error(err)
-		}
-		if !deepEqualLite(v, w) {
-			t.Errorf("Unmarshal() mismatch: %#v != %#v", v, w)
-		}
+			w := newv()
+			if err := Unmarshal(b, w); err != nil {
+				t.Error(err)
+			}
+			if !deepEqualLite(v, w) {
+				t.Errorf("%x: Unmarshal() mismatch: %#v != %#v", a, v, w)
+			}
 
-		c, err := Marshal(w)
-		if err != nil {
-			t.Error(err)
+			c, err := Marshal(w)
+			if err != nil {
+				t.Error(err)
+			}
+			if diff := gocmp.Diff(b, c); diff != "" {
+				t.Errorf("%x: Marshal() mismatch (-want +got):\n%s", a, diff)
+			}
 		}
-		if diff := gocmp.Diff(b, c); diff != "" {
-			t.Errorf("Marshal() mismatch (-want +got):\n%s", diff)
+	})
+}
+
+func FuzzDecode(f *testing.F) {
+	for _, tt := range unmarshalTests {
+		f.Add(tt.data)
+	}
+	for _, tt := range notWellFormed {
+		f.Add(tt)
+	}
+
+	types := []func() any{
+		func() any { return new(any) },
+		func() any { return new(map[string]any) },
+		func() any { return new(map[any]any) },
+		func() any { return new([]any) },
+	}
+	opts := []func(dec *Decoder){
+		func(dec *Decoder) {},
+		func(dec *Decoder) { dec.UseAnyKey() },
+		func(dec *Decoder) { dec.UseInteger() },
+		func(dec *Decoder) { dec.UseInteger(); dec.UseAnyKey() },
+	}
+
+	f.Fuzz(func(t *testing.T, a []byte) {
+		for _, newv := range types {
+			for _, opt := range opts {
+				r := bytes.NewReader(a)
+				dec := NewDecoder(r)
+				opt(dec)
+				v := newv()
+				if err := dec.Decode(v); err != nil {
+					return
+				}
+
+				b, err := Marshal(v)
+				if err != nil {
+					t.Error(err)
+				}
+
+				r = bytes.NewReader(a)
+				dec = NewDecoder(r)
+				opt(dec)
+				w := newv()
+				if err := dec.Decode(w); err != nil {
+					t.Error(err)
+				}
+				if !deepEqualLite(v, w) {
+					t.Errorf("%x: Unmarshal() mismatch: %#v != %#v", a, v, w)
+				}
+
+				c, err := Marshal(w)
+				if err != nil {
+					t.Error(err)
+				}
+				if diff := gocmp.Diff(b, c); diff != "" {
+					t.Errorf("%x: Marshal() mismatch (-want +got):\n%s", a, diff)
+				}
+			}
 		}
 	})
 }
