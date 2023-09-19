@@ -305,6 +305,10 @@ func undefinedEncoder(e *encodeState, v reflect.Value) error {
 }
 
 func sliceEncoder(e *encodeState, v reflect.Value) error {
+	if v.IsZero() {
+		return e.encodeNull()
+	}
+
 	l := v.Len()
 	switch {
 	case l < 0x17:
@@ -341,6 +345,10 @@ func cmpMapKey(a, b mapKey) int {
 }
 
 func mapEncoder(s *encodeState, v reflect.Value) error {
+	if v.IsZero() {
+		return s.encodeNull()
+	}
+
 	l := v.Len()
 	keys := make([]mapKey, 0, l)
 	for _, key := range v.MapKeys() {
