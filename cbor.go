@@ -140,6 +140,13 @@ type Simple byte
 type TagNumber uint64
 
 const (
+	tagNumberDatetimeString  TagNumber = 0
+	tagNumberEpochDatetime   TagNumber = 1
+	tagNumberPositiveBignum  TagNumber = 2
+	tagNumberNegativeBignum  TagNumber = 3
+	tagNumberDecimalFraction TagNumber = 4
+	tagNumberBigfloat        TagNumber = 5
+
 	tagNumberExpectedBase64URL TagNumber = 21
 	tagNumberExpectedBase64    TagNumber = 22
 	tagNumberExpectedBase16    TagNumber = 23

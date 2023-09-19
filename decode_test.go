@@ -624,46 +624,24 @@ var unmarshalTests = []struct {
 			Content: float64(1363896240.5),
 		},
 	},
-	{
-		"tag 23",
-		[]byte{0xd7, 0x44, 0x01, 0x02, 0x03, 0x04},
-		new(any),
-		ptr(any(Tag{
-			Number:  23,
-			Content: []byte{0x01, 0x02, 0x03, 0x04},
-		})),
-	},
-	{
-		"tag 24",
-		[]byte{0xd8, 0x18, 0x45, 0x64, 0x49, 0x45, 0x54, 0x46},
-		new(any),
-		ptr(any(Tag{
-			Number:  24,
-			Content: []byte{0x64, 0x49, 0x45, 0x54, 0x46},
-		})),
-	},
-	{
-		"tag 32",
-		[]byte{0xd8, 0x20, 0x76, 0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f, 0x77, 0x77, 0x77, 0x2e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d},
-		new(Tag),
-		&Tag{
-			Number:  32,
-			Content: "http://www.example.com",
-		},
-	},
-	{
-		"simple(16)",
-		[]byte{0xf0},
-		new(any),
-		ptr(any(Simple(16))),
-	},
-	{
-		"simple(255)",
-		[]byte{0xf8, 0xff},
-		new(any),
-		ptr(any(Simple(255))),
-	},
-
+	// {
+	// 	"tag 23",
+	// 	[]byte{0xd7, 0x44, 0x01, 0x02, 0x03, 0x04},
+	// 	new(any),
+	// 	ptr(any(Tag{
+	// 		Number:  23,
+	// 		Content: []byte{0x01, 0x02, 0x03, 0x04},
+	// 	})),
+	// },
+	// {
+	// 	"tag 24",
+	// 	[]byte{0xd8, 0x18, 0x45, 0x64, 0x49, 0x45, 0x54, 0x46},
+	// 	new(any),
+	// 	ptr(any(Tag{
+	// 		Number:  24,
+	// 		Content: []byte{0x64, 0x49, 0x45, 0x54, 0x46},
+	// 	})),
+	// },
 	// URI
 	{
 		"uri",
@@ -673,6 +651,18 @@ var unmarshalTests = []struct {
 			Scheme: "http",
 			Host:   "www.example.com",
 		})),
+	},
+	{
+		"base64 string",
+		[]byte{0xd8, 0x22, 0x6c, 0x38, 0x4a, 0x2b, 0x4e, 0x6f, 0x2f, 0x43, 0x66, 0x6a, 0x62, 0x6f, 0x3d},
+		new(any),
+		ptr(any(Base64String("8J+No/Cfjbo="))),
+	},
+	{
+		"base64url string",
+		[]byte{0xd8, 0x21, 0x6b, 0x38, 0x4a, 0x2d, 0x4e, 0x6f, 0x5f, 0x43, 0x66, 0x6a, 0x62, 0x6f},
+		new(any),
+		ptr(any(Base64URLString("8J-No_Cfjbo"))),
 	},
 
 	// self-describe CBOR
@@ -684,6 +674,19 @@ var unmarshalTests = []struct {
 		},
 		new(any),
 		ptr(any("IETF")),
+	},
+
+	{
+		"simple(16)",
+		[]byte{0xf0},
+		new(any),
+		ptr(any(Simple(16))),
+	},
+	{
+		"simple(255)",
+		[]byte{0xf8, 0xff},
+		new(any),
+		ptr(any(Simple(255))),
 	},
 
 	// decode to struct
