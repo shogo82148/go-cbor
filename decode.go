@@ -1679,6 +1679,11 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 
 	// tag number 24: encoded CBOR data item
 	case tagNumberEncodedData:
+		var data []byte
+		if err := d.decode(&data); err != nil {
+			return err
+		}
+		return d.setAny(start, "encoded data", EncodedData(data), v)
 
 	// tag number 32: URI
 	case tagNumberURI:
@@ -1862,15 +1867,27 @@ func (d *decodeState) decodeBigFloat(start int, v reflect.Value) error {
 }
 
 func (d *decodeState) decodeExpectedBase64URL(start int, v reflect.Value) error {
-	return nil
+	var data any
+	if err := d.decode(&data); err != nil {
+		return err
+	}
+	return d.setAny(start, "expected base64url", ExpectedBase64URL{Content: data}, v)
 }
 
 func (d *decodeState) decodeExpectedBase64(start int, v reflect.Value) error {
-	return nil
+	var data any
+	if err := d.decode(&data); err != nil {
+		return err
+	}
+	return d.setAny(start, "expected base64", ExpectedBase64{Content: data}, v)
 }
 
 func (d *decodeState) decodeExpectedBase16(start int, v reflect.Value) error {
-	return nil
+	var data any
+	if err := d.decode(&data); err != nil {
+		return err
+	}
+	return d.setAny(start, "expected base16", ExpectedBase16{Content: data}, v)
 }
 
 func (d *decodeState) setSimple(start int, s Simple, v reflect.Value) error {
