@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"reflect"
@@ -16,6 +17,17 @@ import (
 type CBORMarshaler interface {
 	// MarshalCBOR returns the CBOR encoding of the receiver.
 	MarshalCBOR() ([]byte, error)
+}
+
+// An UnsupportedValueError is returned by Marshal when attempting
+// to encode an unsupported value.
+type UnsupportedValueError struct {
+	Value reflect.Value
+	Str   string
+}
+
+func (e *UnsupportedValueError) Error() string {
+	return "cbor: unsupported value: " + e.Str
 }
 
 type majorType byte
@@ -41,12 +53,24 @@ func Marshal(v any) ([]byte, error) {
 }
 
 func newEncodeState() *encodeState {
-	return &encodeState{}
+	return &encodeState{
+		ptrSeen: make(map[any]struct{}),
+	}
 }
 
 type encodeState struct {
 	buf bytes.Buffer
+
+	// Keep track of what pointers we've seen in the current recursive call
+	// path, to avoid cycles that could lead to a stack overflow. Only do
+	// the relatively expensive map operations if ptrLevel is larger than
+	// startDetectingCyclesAfter, so that we skip the work if we're within a
+	// reasonable amount of nested pointers deep.
+	ptrLevel uint
+	ptrSeen  map[any]struct{}
 }
+
+const startDetectingCyclesAfter = 1000
 
 func (s *encodeState) encode(v any) error {
 	// fast path for basic types
@@ -309,29 +333,26 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 		return e.encodeNull()
 	}
 
-	l := v.Len()
-	switch {
-	case l < 0x17:
-		e.writeByte(byte(0x80 + l))
-	case l < 0x100:
-		e.writeByte(0x98)
-		e.writeByte(byte(l))
-	case int64(l) < 0x10000:
-		e.writeByte(0x99)
-		e.writeUint16(uint16(l))
-	case int64(l) < 0x100000000:
-		e.writeByte(0x9a)
-		e.writeUint32(uint32(l))
-	default:
-		e.writeByte(0x9b)
-		e.writeUint64(uint64(l))
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.UnsafePointer()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
 	}
+
+	l := v.Len()
+	e.writeUint(majorTypeArray, uint64(l))
 	for i := 0; i < l; i++ {
 		err := e.encode(v.Index(i).Interface())
 		if err != nil {
 			return err
 		}
 	}
+	e.ptrLevel--
 	return nil
 }
 
@@ -344,9 +365,20 @@ func cmpMapKey(a, b mapKey) int {
 	return bytes.Compare(a.encoded, b.encoded)
 }
 
-func mapEncoder(s *encodeState, v reflect.Value) error {
+func mapEncoder(e *encodeState, v reflect.Value) error {
 	if v.IsZero() {
-		return s.encodeNull()
+		return e.encodeNull()
+	}
+
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.UnsafePointer()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
 	}
 
 	l := v.Len()
@@ -361,14 +393,16 @@ func mapEncoder(s *encodeState, v reflect.Value) error {
 	slices.SortFunc(keys, cmpMapKey)
 
 	// encode the length
-	s.writeUint(majorTypeMap, uint64(l))
+	e.writeUint(majorTypeMap, uint64(l))
+
 	for _, key := range keys {
-		s.buf.Write(key.encoded)
+		e.buf.Write(key.encoded)
 		value := v.MapIndex(key.key)
-		if err := s.encodeReflectValue(value); err != nil {
+		if err := e.encodeReflectValue(value); err != nil {
 			return err
 		}
 	}
+	e.ptrLevel--
 	return nil
 }
 
@@ -387,8 +421,21 @@ func (pe ptrEncoder) encode(e *encodeState, v reflect.Value) error {
 	if v.IsNil() {
 		return e.encodeNull()
 	}
-	// TODO: check for circular references
-	return pe.elemEnc(e, v.Elem())
+
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.Interface()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
+	}
+
+	err := pe.elemEnc(e, v.Elem())
+	e.ptrLevel--
+	return err
 }
 
 func newPtrEncoder(t reflect.Type) encoderFunc {

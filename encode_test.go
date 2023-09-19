@@ -8,6 +8,31 @@ import (
 	"time"
 )
 
+func TestMarshal_Cycles(t *testing.T) {
+	// Pointer cycle
+	type PointerCycle struct {
+		Ptr *PointerCycle
+	}
+	var pointerCycle = &PointerCycle{}
+	pointerCycle.Ptr = pointerCycle
+
+	// map cycle
+	mapCycle := map[string]any{}
+	mapCycle["a"] = map[string]any{"b": mapCycle}
+
+	// slice cycle
+	sliceCycle := []any{nil}
+	sliceCycle[0] = []any{sliceCycle}
+
+	for _, v := range []any{pointerCycle, mapCycle, sliceCycle} {
+		_, err := Marshal(v)
+		_, ok := err.(*UnsupportedValueError)
+		if !ok {
+			t.Errorf("expected error, got nil")
+		}
+	}
+}
+
 func newBigInt(s string) *big.Int {
 	i := new(big.Int)
 	if _, ok := i.SetString(s, 0); !ok {
