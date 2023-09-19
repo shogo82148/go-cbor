@@ -2,6 +2,7 @@ package cbor
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -207,6 +208,18 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return timeEncoder
 	case urlType:
 		return urlEncoder
+	case base64StringType:
+		return newBase64Encoder(tagNumberBase64, base64.StdEncoding.Strict())
+	case base64URLStringType:
+		return newBase64Encoder(tagNumberBase64URL, base64.RawURLEncoding.Strict())
+	case encodedData:
+		return encodedDataEncoder
+	case expectedBase16Type:
+		return newExpectedEncoder(tagNumberExpectedBase16, t)
+	case expectedBase64Type:
+		return newExpectedEncoder(tagNumberExpectedBase64, t)
+	case expectedBase64URLType:
+		return newExpectedEncoder(tagNumberExpectedBase64URL, t)
 	}
 
 	switch t.Kind() {
@@ -340,11 +353,66 @@ func timeEncoder(e *encodeState, v reflect.Value) error {
 func urlEncoder(e *encodeState, v reflect.Value) error {
 	u := v.Addr().Interface().(*url.URL)
 	s := u.String()
+
+	// write tag number 32: URI
 	e.writeByte(0xd8)
-	e.writeByte(byte(tagNumberURI)) // tag 32: URI
+	e.writeByte(byte(tagNumberURI))
+
 	e.writeUint(majorTypeString, uint64(len(s)))
 	e.buf.WriteString(s)
 	return nil
+}
+
+func newBase64Encoder(n TagNumber, enc *base64.Encoding) encoderFunc {
+	if n < 32 || n >= 0x100 {
+		panic("invalid tag number")
+	}
+	return func(e *encodeState, v reflect.Value) error {
+		// validate that the value is a base64 encoded string.
+		data := v.String()
+		if _, err := enc.DecodeString(data); err != nil {
+			return wrapSemanticError("cbor: invalid base64 encoding", err)
+		}
+
+		// write tag number
+		e.writeByte(0xd8)
+		e.writeByte(byte(n))
+
+		// write data
+		e.writeUint(majorTypeString, uint64(len(data)))
+		e.buf.WriteString(data)
+		return nil
+	}
+}
+
+func encodedDataEncoder(e *encodeState, v reflect.Value) error {
+	// write tag number 24: encoded CBOR data item
+	e.writeByte(0xd8)
+	e.writeByte(byte(tagNumberEncodedData))
+
+	// write data
+	data := v.Bytes()
+	e.writeUint(majorTypeBytes, uint64(len(data)))
+	e.buf.Write(data)
+	return nil
+}
+
+func newExpectedEncoder(n TagNumber, t reflect.Type) encoderFunc {
+	if n >= 24 {
+		panic("invalid tag number")
+	}
+	f, ok := t.FieldByName("Content")
+	if !ok {
+		panic("expected struct does not have Content field")
+	}
+
+	return func(e *encodeState, v reflect.Value) error {
+		// write tag number
+		e.writeByte(0xc0 + byte(n))
+
+		// write data
+		return e.encodeReflectValue(v.FieldByIndex(f.Index))
+	}
 }
 
 func undefinedEncoder(e *encodeState, v reflect.Value) error {
