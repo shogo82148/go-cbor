@@ -1275,7 +1275,7 @@ func typeOf[T any]() reflect.Type {
 	return reflect.TypeOf((*T)(nil)).Elem()
 }
 
-func TestUnmarshal_Error(t *testing.T) {
+func TestUnmarshal_UnmarshalTypeError(t *testing.T) {
 	tests := []struct {
 		name string
 		data []byte
@@ -1527,6 +1527,20 @@ func TestUnmarshal_SemanticError(t *testing.T) {
 		var v struct {
 			A int `cbor:"0"`
 		}
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("NaN in map keys", func(t *testing.T) {
+		data := []byte{
+			// {NaN: 0}
+			0xa1, 0xf9, 0x7e, 0x00, 0x00,
+		}
+
+		var v any
 		err := Unmarshal(data, &v)
 		_, ok := err.(*SemanticError)
 		if !ok {
