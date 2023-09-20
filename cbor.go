@@ -4,6 +4,8 @@ import (
 	"errors"
 	"math"
 	"math/big"
+	"math/bits"
+	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
@@ -12,14 +14,22 @@ import (
 
 var anySliceType = reflect.TypeOf([]any(nil))
 var anyType = reflect.TypeOf((*any)(nil)).Elem()
-var bigFloatType = reflect.TypeOf((*big.Float)(nil)).Elem()
-var bigIntType = reflect.TypeOf((*big.Int)(nil)).Elem()
+var bigFloatType = reflect.TypeOf(big.Float{})
+var bigIntType = reflect.TypeOf(big.Int{})
 var byteType = reflect.TypeOf(byte(0))
 var integerType = reflect.TypeOf(Integer{})
 var simpleType = reflect.TypeOf(Simple(0))
 var tagType = reflect.TypeOf(Tag{})
-var timeType = reflect.TypeOf((*time.Time)(nil)).Elem()
+var timeType = reflect.TypeOf(time.Time{})
 var undefinedType = reflect.TypeOf(Undefined)
+var urlType = reflect.TypeOf(url.URL{})
+
+var base64StringType = reflect.TypeOf(Base64String(""))
+var base64URLStringType = reflect.TypeOf(Base64URLString(""))
+var encodedData = reflect.TypeOf(EncodedData(nil))
+var expectedBase16Type = reflect.TypeOf(ExpectedBase16{})
+var expectedBase64Type = reflect.TypeOf(ExpectedBase64{})
+var expectedBase64URLType = reflect.TypeOf(ExpectedBase64URL{})
 
 var minusOne = big.NewInt(-1)
 
@@ -100,11 +110,104 @@ func (i Integer) BigInt() *big.Int {
 	return v
 }
 
+func (i Integer) MarshalJSON() ([]byte, error) {
+	var buf []byte
+	if i.Sign {
+		if i.Value == math.MaxUint64 {
+			return []byte(`-18446744073709551616`), nil
+		}
+		buf = append(buf, '-')
+		return strconv.AppendUint(buf, i.Value+1, 10), nil
+	} else {
+		return strconv.AppendUint(buf, i.Value, 10), nil
+	}
+}
+
+func (i *Integer) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 {
+		return errors.New("cbor: empty JSON string")
+	}
+	if b[0] == '-' {
+		i.Sign = true
+		b = b[1:]
+	} else if b[0] == '+' {
+		i.Sign = false
+		b = b[1:]
+	} else if '0' <= b[0] && b[0] <= '9' {
+		i.Sign = false
+	} else {
+		return errors.New("cbor: invalid JSON string")
+	}
+
+	// parse the integer as uint128
+	var hi, lo uint64
+	for _, c := range b {
+		var carry uint64
+		if c < '0' || '9' < c {
+			return errors.New("cbor: invalid JSON string")
+		}
+		d := int64(c - '0')
+
+		// hi, lo = (hi, lo) * 10 + d
+		h, l := bits.Mul64(lo, 10)
+		hi += h
+		lo, carry = bits.Add64(l, uint64(d), 0)
+		hi, _ = bits.Add64(hi, 0, carry)
+
+		if hi > 0 && lo > 0 {
+			return errors.New("cbor: integer overflow")
+		}
+	}
+
+	if i.Sign {
+		if lo == 0 && hi == 0 {
+			i.Sign = false
+			i.Value = 0
+			return nil
+		}
+		var borrow uint64
+		lo, borrow = bits.Sub64(lo, 1, 0)
+		hi, _ = bits.Sub64(hi, 0, borrow)
+		if hi > 0 {
+			return errors.New("cbor: integer overflow")
+		}
+		i.Value = lo
+	} else {
+		if hi > 0 {
+			return errors.New("cbor: integer overflow")
+		}
+		i.Value = lo
+	}
+	return nil
+}
+
+// EncodedData is a CBOR encoded data.
+type EncodedData []byte
+
 // Simple is a CBOR simple type.
 type Simple byte
 
 // TagNumber is a CBOR tag number type.
 type TagNumber uint64
+
+const (
+	tagNumberDatetimeString  TagNumber = 0
+	tagNumberEpochDatetime   TagNumber = 1
+	tagNumberPositiveBignum  TagNumber = 2
+	tagNumberNegativeBignum  TagNumber = 3
+	tagNumberDecimalFraction TagNumber = 4
+	tagNumberBigfloat        TagNumber = 5
+
+	tagNumberExpectedBase64URL TagNumber = 21
+	tagNumberExpectedBase64    TagNumber = 22
+	tagNumberExpectedBase16    TagNumber = 23
+	tagNumberEncodedData       TagNumber = 24
+
+	tagNumberURI          TagNumber = 32
+	tagNumberBase64URL    TagNumber = 33
+	tagNumberBase64       TagNumber = 34
+	tagNumberSelfDescribe TagNumber = 55799
+)
 
 // Tag is a CBOR tag.
 type Tag struct {

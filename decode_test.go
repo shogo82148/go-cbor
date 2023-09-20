@@ -3,6 +3,7 @@ package cbor
 import (
 	"math"
 	"math/big"
+	"net/url"
 	"reflect"
 	"testing"
 	"time"
@@ -31,6 +32,18 @@ func TestDecodeState_isAvailable(t *testing.T) {
 	// int(math.MaxUint64) overflows int
 	if d.isAvailable(math.MaxUint64) {
 		t.Errorf("IsAvailable(math.MaxUint64) = true, want false")
+	}
+}
+
+func testUnexpectedEnd(t *testing.T, input []byte) {
+	t.Helper()
+
+	for i := 1; i < len(input)-1; i++ {
+		var v any
+		err := Unmarshal(input[:i], &v)
+		if err != ErrUnexpectedEnd {
+			t.Errorf("Unmarshal(%x) = %v, want errUnexpectedEnd", input[:i], err)
+		}
 	}
 }
 
@@ -624,32 +637,306 @@ var unmarshalTests = []struct {
 		},
 	},
 	{
-		"tag 23",
-		[]byte{0xd7, 0x44, 0x01, 0x02, 0x03, 0x04},
+		"expected base64url",
+		[]byte{0xd5, 0x44, 0x01, 0x02, 0x03, 0x04},
 		new(any),
-		ptr(any(Tag{
-			Number:  23,
+		ptr(any(ExpectedBase64URL{
 			Content: []byte{0x01, 0x02, 0x03, 0x04},
 		})),
 	},
 	{
-		"tag 24",
-		[]byte{0xd8, 0x18, 0x45, 0x64, 0x49, 0x45, 0x54, 0x46},
+		"expected base64",
+		[]byte{0xd6, 0x44, 0x01, 0x02, 0x03, 0x04},
 		new(any),
-		ptr(any(Tag{
-			Number:  24,
-			Content: []byte{0x64, 0x49, 0x45, 0x54, 0x46},
+		ptr(any(ExpectedBase64{
+			Content: []byte{0x01, 0x02, 0x03, 0x04},
 		})),
 	},
 	{
-		"tag 32",
-		[]byte{0xd8, 0x20, 0x76, 0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f, 0x77, 0x77, 0x77, 0x2e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d},
+		"expected base16",
+		[]byte{0xd7, 0x44, 0x01, 0x02, 0x03, 0x04},
 		new(any),
-		ptr(any(Tag{
-			Number:  32,
-			Content: "http://www.example.com",
+		ptr(any(ExpectedBase16{
+			Content: []byte{0x01, 0x02, 0x03, 0x04},
 		})),
 	},
+	{
+		"encoded data",
+		[]byte{0xd8, 0x18, 0x45, 0x64, 0x49, 0x45, 0x54, 0x46},
+		new(any),
+		ptr(any(EncodedData{0x64, 0x49, 0x45, 0x54, 0x46})),
+	},
+	{
+		"uri",
+		[]byte{0xd8, 0x20, 0x76, 0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f, 0x77, 0x77, 0x77, 0x2e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d},
+		new(any),
+		ptr(any(&url.URL{
+			Scheme: "http",
+			Host:   "www.example.com",
+		})),
+	},
+	{
+		"base64 string",
+		[]byte{0xd8, 0x22, 0x6c, 0x38, 0x4a, 0x2b, 0x4e, 0x6f, 0x2f, 0x43, 0x66, 0x6a, 0x62, 0x6f, 0x3d},
+		new(any),
+		ptr(any(Base64String("8J+No/Cfjbo="))),
+	},
+	{
+		"base64url string",
+		[]byte{0xd8, 0x21, 0x6b, 0x38, 0x4a, 0x2d, 0x4e, 0x6f, 0x5f, 0x43, 0x66, 0x6a, 0x62, 0x6f},
+		new(any),
+		ptr(any(Base64URLString("8J-No_Cfjbo"))),
+	},
+
+	// byte strings
+	{
+		"uint8_t length byte string",
+		[]byte{
+			0x58, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+	{
+		"uint16_t length byte string",
+		[]byte{
+			0x59, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+	{
+		"uint32_t length byte string",
+		[]byte{
+			0x5a, 0x00, 0x00, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+	{
+		"uint64_t length byte string",
+		[]byte{
+			0x5b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+	{
+		"indefinite-length multi-chunk byte string",
+		[]byte{
+			0x5f, // start indefinite-length byte string
+
+			// first chunk
+			0x40, // empty byte string
+
+			// second chunk
+			0x58, 0x01,
+			0x01,
+
+			// third chunk
+			0x59, 0x00, 0x01,
+			0x02,
+
+			// fourth chunk
+			0x5a, 0x00, 0x00, 0x00, 0x01,
+			0x03,
+
+			// fifth chunk
+			0x5b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+			0x04,
+
+			0xff, // break
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+
+	// text strings
+	{
+		"uint8_t length byte string",
+		[]byte{
+			0x78, 0x04,
+			0x61, 0x62, 0x63, 0x64,
+		},
+		new(any),
+		ptr(any("abcd")),
+	},
+	{
+		"uint16_t length byte string",
+		[]byte{
+			0x79, 0x00, 0x04,
+			0x61, 0x62, 0x63, 0x64,
+		},
+		new(any),
+		ptr(any("abcd")),
+	},
+	{
+		"uint32_t length byte string",
+		[]byte{
+			0x7a, 0x00, 0x00, 0x00, 0x04,
+			0x61, 0x62, 0x63, 0x64,
+		},
+		new(any),
+		ptr(any("abcd")),
+	},
+	{
+		"uint64_t length byte string",
+		[]byte{
+			0x7b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+			0x61, 0x62, 0x63, 0x64,
+		},
+		new(any),
+		ptr(any("abcd")),
+	},
+	{
+		"indefinite-length multi-chunk text string",
+		[]byte{
+			0x7f, // start indefinite-length byte string
+
+			// first chunk
+			0x60, // empty byte string
+
+			// second chunk
+			0x78, 0x01,
+			0xf0,
+
+			// third chunk
+			0x79, 0x00, 0x01,
+			0x9f,
+
+			// fourth chunk
+			0x7a, 0x00, 0x00, 0x00, 0x01,
+			0x8d,
+
+			// fifth chunk
+			0x7b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+			0xa3,
+
+			0xff, // break
+		},
+		new(any),
+		ptr(any("🍣")),
+	},
+
+	// arrays
+	{
+		"uint8_t length array",
+		[]byte{
+			0x98, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
+	},
+	{
+		"uint16_t length array",
+		[]byte{
+			0x99, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
+	},
+	{
+		"uint32_t length array",
+		[]byte{
+			0x9a, 0x00, 0x00, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
+	},
+	{
+		"uint64_t length array",
+		[]byte{
+			0x9b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
+	},
+
+	{
+		"uint8_t length map",
+		[]byte{
+			0xb8, 0x02,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(map[int64]int64),
+		ptr(map[int64]int64{1: 2, 3: 4}),
+	},
+	{
+		"uint16_t length map",
+		[]byte{
+			0xb9, 0x00, 0x02,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(map[int64]int64),
+		ptr(map[int64]int64{1: 2, 3: 4}),
+	},
+	{
+		"uint32_t length map",
+		[]byte{
+			0xba, 0x00, 0x00, 0x00, 0x02,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(map[int64]int64),
+		ptr(map[int64]int64{1: 2, 3: 4}),
+	},
+	{
+		"uint64_t length map",
+		[]byte{
+			0xbb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(map[int64]int64),
+		ptr(map[int64]int64{1: 2, 3: 4}),
+	},
+
+	// tags
+	{
+		"uint16_t tag number",
+		[]byte{
+			0xd9, 0xd9, 0xf7, // tag 55799: self-describe CBOR
+			0x64, 0x49, 0x45, 0x54, 0x46, // "IETF"
+		},
+		new(any),
+		ptr(any("IETF")),
+	},
+	{
+		"uint32_t tag number",
+		[]byte{
+			0xda, 0x00, 0x00, 0xd9, 0xf7, // tag 55799: self-describe CBOR
+			0x64, 0x49, 0x45, 0x54, 0x46, // "IETF"
+		},
+		new(any),
+		ptr(any("IETF")),
+	},
+	{
+		"uint64_t tag number",
+		[]byte{
+			0xdb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xd9, 0xf7, // tag 55799: self-describe CBOR
+			0x64, 0x49, 0x45, 0x54, 0x46, // "IETF"
+		},
+		new(any),
+		ptr(any("IETF")),
+	},
+
+	// self-describe CBOR
+	{
+		"self-describe CBOR",
+		[]byte{
+			0xd9, 0xd9, 0xf7, // tag 55799: self-describe CBOR
+			0x64, 0x49, 0x45, 0x54, 0x46, // "IETF"
+		},
+		new(any),
+		ptr(any("IETF")),
+	},
+
 	{
 		"simple(16)",
 		[]byte{0xf0},
@@ -729,6 +1016,8 @@ func TestUnmarshal(t *testing.T) {
 			if diff := cmp.Diff(tt.want, tt.ptr, cmpopts.EquateNaNs()); diff != "" {
 				t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
 			}
+
+			testUnexpectedEnd(t, tt.data)
 		})
 	}
 }
@@ -758,6 +1047,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !got.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("rfc3339 to any", func(t *testing.T) {
@@ -774,6 +1065,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !tt.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("rfc3339 to interface", func(t *testing.T) {
@@ -792,6 +1085,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !tt.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("integer epoch", func(t *testing.T) {
@@ -804,6 +1099,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !got.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("float epoch", func(t *testing.T) {
@@ -816,6 +1113,21 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !got.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
+	})
+
+	// https://github.com/shogo82148/go-cbor/pull/67
+	t.Run("float epoch", func(t *testing.T) {
+		input := []byte{0xc1, 0x44, 0x30, 0x30, 0x30, 0x30}
+		var got time.Time
+		err := Unmarshal(input, &got)
+		_, ok := err.(*UnmarshalTypeError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want UnmarshalTypeError", err)
+		}
+
+		testUnexpectedEnd(t, input)
 	})
 }
 
@@ -830,6 +1142,8 @@ func TestUnmarshal_BigInt(t *testing.T) {
 		if got.Cmp(want) != 0 {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("negative", func(t *testing.T) {
@@ -842,6 +1156,8 @@ func TestUnmarshal_BigInt(t *testing.T) {
 		if got.Cmp(want) != 0 {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 }
 
@@ -862,6 +1178,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if got.Cmp(want) != 0 {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("decode to any", func(t *testing.T) {
@@ -885,6 +1203,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if got.Cmp(want) != 0 {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("long length of array", func(t *testing.T) {
@@ -899,6 +1219,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err == nil {
 			t.Errorf("Unmarshal() error = nil, want error")
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("short length of array", func(t *testing.T) {
@@ -910,6 +1232,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err == nil {
 			t.Errorf("Unmarshal() error = nil, want error")
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("invalid type of exponential", func(t *testing.T) {
@@ -927,6 +1251,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err == nil {
 			t.Errorf("Unmarshal() error = nil, want error")
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("invalid type of mant", func(t *testing.T) {
@@ -940,6 +1266,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err == nil {
 			t.Errorf("Unmarshal() error = nil, want error")
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 }
 
@@ -1104,6 +1432,105 @@ func TestUnmarshal_InvalidUnmarshalError(t *testing.T) {
 		want := "cbor: Unmarshal(nil *int)"
 		if got != want {
 			t.Errorf("unexpected Error: got %q, want %q", got, want)
+		}
+	})
+}
+
+func TestUnmarshal_SemanticError(t *testing.T) {
+	t.Run("duplicated map key decoded to map", func(t *testing.T) {
+		data := []byte{
+			0xa2,             // map of length 2
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+		}
+
+		var v map[string]int
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated map key decoded to any", func(t *testing.T) {
+		data := []byte{
+			0xa2,             // map of length 2
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+		}
+
+		var v any
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated map key decoded to struct", func(t *testing.T) {
+		data := []byte{
+			0xa2,             // map of length 2
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+		}
+
+		var v struct {
+			A int `cbor:"0"`
+		}
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated indefinite-length map key decoded to map", func(t *testing.T) {
+		data := []byte{
+			0xbf,             // indefinite-length
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+			0xff, // break
+		}
+
+		var v map[string]int
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated indefinite-length map key decoded to any", func(t *testing.T) {
+		data := []byte{
+			0xbf,             // indefinite-length
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+			0xff, // break
+		}
+
+		var v any
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		}
+	})
+
+	t.Run("duplicated indefinite-length map key decoded to struct", func(t *testing.T) {
+		data := []byte{
+			0xbf,             // indefinite-length
+			0x61, 0x30, 0x02, // "0": 2
+			0x61, 0x30, 0x03, // "0": 3
+			0xff, // break
+		}
+
+		var v struct {
+			A int `cbor:"0"`
+		}
+		err := Unmarshal(data, &v)
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
 		}
 	})
 }

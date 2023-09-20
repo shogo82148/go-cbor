@@ -2,10 +2,13 @@ package cbor
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
+	"net/url"
 	"reflect"
 	"slices"
 	"strings"
@@ -16,6 +19,27 @@ import (
 type CBORMarshaler interface {
 	// MarshalCBOR returns the CBOR encoding of the receiver.
 	MarshalCBOR() ([]byte, error)
+}
+
+// An UnsupportedTypeError is returned by Marshal when attempting
+// to encode an unsupported value type.
+type UnsupportedTypeError struct {
+	Type reflect.Type
+}
+
+func (e *UnsupportedTypeError) Error() string {
+	return "cbor: unsupported type: " + e.Type.String()
+}
+
+// An UnsupportedValueError is returned by Marshal when attempting
+// to encode an unsupported value.
+type UnsupportedValueError struct {
+	Value reflect.Value
+	Str   string
+}
+
+func (e *UnsupportedValueError) Error() string {
+	return "cbor: unsupported value: " + e.Str
 }
 
 type majorType byte
@@ -41,12 +65,24 @@ func Marshal(v any) ([]byte, error) {
 }
 
 func newEncodeState() *encodeState {
-	return &encodeState{}
+	return &encodeState{
+		ptrSeen: make(map[any]struct{}),
+	}
 }
 
 type encodeState struct {
 	buf bytes.Buffer
+
+	// Keep track of what pointers we've seen in the current recursive call
+	// path, to avoid cycles that could lead to a stack overflow. Only do
+	// the relatively expensive map operations if ptrLevel is larger than
+	// startDetectingCyclesAfter, so that we skip the work if we're within a
+	// reasonable amount of nested pointers deep.
+	ptrLevel uint
+	ptrSeen  map[any]struct{}
 }
+
+const startDetectingCyclesAfter = 1000
 
 func (s *encodeState) encode(v any) error {
 	// fast path for basic types
@@ -170,6 +206,20 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return integerEncoder
 	case timeType:
 		return timeEncoder
+	case urlType:
+		return urlEncoder
+	case base64StringType:
+		return newBase64Encoder(tagNumberBase64, base64.StdEncoding.Strict())
+	case base64URLStringType:
+		return newBase64Encoder(tagNumberBase64URL, base64.RawURLEncoding.Strict())
+	case encodedData:
+		return encodedDataEncoder
+	case expectedBase16Type:
+		return newExpectedEncoder(tagNumberExpectedBase16, t)
+	case expectedBase64Type:
+		return newExpectedEncoder(tagNumberExpectedBase64, t)
+	case expectedBase64URLType:
+		return newExpectedEncoder(tagNumberExpectedBase64URL, t)
 	}
 
 	switch t.Kind() {
@@ -198,8 +248,9 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return newPtrEncoder(t)
 	case reflect.Struct:
 		return newStructEncoder(t)
+	default:
+		return unsupportedTypeEncoder
 	}
-	panic("TODO implement")
 }
 
 func boolEncoder(e *encodeState, v reflect.Value) error {
@@ -299,6 +350,71 @@ func timeEncoder(e *encodeState, v reflect.Value) error {
 	return e.encodeFloat64(epoch)
 }
 
+func urlEncoder(e *encodeState, v reflect.Value) error {
+	u := v.Addr().Interface().(*url.URL)
+	s := u.String()
+
+	// write tag number 32: URI
+	e.writeByte(0xd8)
+	e.writeByte(byte(tagNumberURI))
+
+	e.writeUint(majorTypeString, uint64(len(s)))
+	e.buf.WriteString(s)
+	return nil
+}
+
+func newBase64Encoder(n TagNumber, enc *base64.Encoding) encoderFunc {
+	if n < 32 || n >= 0x100 {
+		panic("invalid tag number")
+	}
+	return func(e *encodeState, v reflect.Value) error {
+		// validate that the value is a base64 encoded string.
+		data := v.String()
+		if _, err := enc.DecodeString(data); err != nil {
+			return wrapSemanticError("cbor: invalid base64 encoding", err)
+		}
+
+		// write tag number
+		e.writeByte(0xd8)
+		e.writeByte(byte(n))
+
+		// write data
+		e.writeUint(majorTypeString, uint64(len(data)))
+		e.buf.WriteString(data)
+		return nil
+	}
+}
+
+func encodedDataEncoder(e *encodeState, v reflect.Value) error {
+	// write tag number 24: encoded CBOR data item
+	e.writeByte(0xd8)
+	e.writeByte(byte(tagNumberEncodedData))
+
+	// write data
+	data := v.Bytes()
+	e.writeUint(majorTypeBytes, uint64(len(data)))
+	e.buf.Write(data)
+	return nil
+}
+
+func newExpectedEncoder(n TagNumber, t reflect.Type) encoderFunc {
+	if n >= 24 {
+		panic("invalid tag number")
+	}
+	f, ok := t.FieldByName("Content")
+	if !ok {
+		panic("expected struct does not have Content field")
+	}
+
+	return func(e *encodeState, v reflect.Value) error {
+		// write tag number
+		e.writeByte(0xc0 + byte(n))
+
+		// write data
+		return e.encodeReflectValue(v.FieldByIndex(f.Index))
+	}
+}
+
 func undefinedEncoder(e *encodeState, v reflect.Value) error {
 	e.writeByte(0xf7)
 	return nil
@@ -309,29 +425,26 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 		return e.encodeNull()
 	}
 
-	l := v.Len()
-	switch {
-	case l < 0x17:
-		e.writeByte(byte(0x80 + l))
-	case l < 0x100:
-		e.writeByte(0x98)
-		e.writeByte(byte(l))
-	case int64(l) < 0x10000:
-		e.writeByte(0x99)
-		e.writeUint16(uint16(l))
-	case int64(l) < 0x100000000:
-		e.writeByte(0x9a)
-		e.writeUint32(uint32(l))
-	default:
-		e.writeByte(0x9b)
-		e.writeUint64(uint64(l))
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.UnsafePointer()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
 	}
+
+	l := v.Len()
+	e.writeUint(majorTypeArray, uint64(l))
 	for i := 0; i < l; i++ {
 		err := e.encode(v.Index(i).Interface())
 		if err != nil {
 			return err
 		}
 	}
+	e.ptrLevel--
 	return nil
 }
 
@@ -344,9 +457,20 @@ func cmpMapKey(a, b mapKey) int {
 	return bytes.Compare(a.encoded, b.encoded)
 }
 
-func mapEncoder(s *encodeState, v reflect.Value) error {
+func mapEncoder(e *encodeState, v reflect.Value) error {
 	if v.IsZero() {
-		return s.encodeNull()
+		return e.encodeNull()
+	}
+
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.UnsafePointer()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
 	}
 
 	l := v.Len()
@@ -361,14 +485,16 @@ func mapEncoder(s *encodeState, v reflect.Value) error {
 	slices.SortFunc(keys, cmpMapKey)
 
 	// encode the length
-	s.writeUint(majorTypeMap, uint64(l))
+	e.writeUint(majorTypeMap, uint64(l))
+
 	for _, key := range keys {
-		s.buf.Write(key.encoded)
+		e.buf.Write(key.encoded)
 		value := v.MapIndex(key.key)
-		if err := s.encodeReflectValue(value); err != nil {
+		if err := e.encodeReflectValue(value); err != nil {
 			return err
 		}
 	}
+	e.ptrLevel--
 	return nil
 }
 
@@ -387,8 +513,21 @@ func (pe ptrEncoder) encode(e *encodeState, v reflect.Value) error {
 	if v.IsNil() {
 		return e.encodeNull()
 	}
-	// TODO: check for circular references
-	return pe.elemEnc(e, v.Elem())
+
+	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
+		// We're a large number of nested ptrEncoder.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := v.Interface()
+		if _, ok := e.ptrSeen[ptr]; ok {
+			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+		}
+		e.ptrSeen[ptr] = struct{}{}
+		defer delete(e.ptrSeen, ptr)
+	}
+
+	err := pe.elemEnc(e, v.Elem())
+	e.ptrLevel--
+	return err
 }
 
 func newPtrEncoder(t reflect.Type) encoderFunc {
@@ -444,6 +583,10 @@ func newStructEncoder(t reflect.Type) encoderFunc {
 	} else {
 		return se.encodeAsMap
 	}
+}
+
+func unsupportedTypeEncoder(e *encodeState, v reflect.Value) error {
+	return &UnsupportedTypeError{v.Type()}
 }
 
 func (s *encodeState) writeByte(v byte) {
