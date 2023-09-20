@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"math"
-	"math/big"
 	"math/bits"
 	"reflect"
 	"strconv"
@@ -660,12 +659,18 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 func (d *decodeState) setAny(start int, value string, w any, v reflect.Value) error {
 	rw := reflect.ValueOf(w)
-	if rw.Type() == v.Type() {
+	tw := rw.Type()
+	tv := v.Type()
+	if tw == tv {
 		v.Set(rw)
 		return nil
 	}
 	if v.Kind() == reflect.Interface && rw.Type().Implements(v.Type()) {
 		v.Set(rw)
+		return nil
+	}
+	if tw.Kind() == reflect.Ptr && tw.Elem() == tv {
+		v.Set(rw.Elem())
 		return nil
 	}
 	d.saveError(&UnmarshalTypeError{Value: value, Type: v.Type(), Offset: int64(start)})
@@ -1577,91 +1582,15 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 	}
 	tag := Tag{Number: n, Content: content}
 	if d.decodingKeys || v.Type() == tagType {
-		d.setAny(start, "tag", reflect.ValueOf(tag), v)
+		d.setAny(start, "tag", tag, v)
 	} else {
 		decoded, err := tag.Decode()
 		if err != nil {
 			return err
 		}
-		d.setAny(start, "tag", reflect.ValueOf(decoded), v)
+		d.setAny(start, "tag", decoded, v)
 	}
 	return nil
-}
-
-func (d *decodeState) decodeBigFloat(start int, v reflect.Value) error {
-	var a []any
-	if err := d.decode(&a); err != nil {
-		return err
-	}
-	if len(a) != 2 {
-		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
-		return nil
-	}
-	var exp int64
-	switch x := a[0].(type) {
-	case int64:
-		exp = x
-	case Integer:
-		var err error
-		exp, err = x.Int64()
-		if err != nil {
-			return err
-		}
-	default:
-		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
-		return nil
-	}
-
-	var mant *big.Int
-	switch x := a[1].(type) {
-	case int64:
-		mant = big.NewInt(x)
-	case Integer:
-		mant = x.BigInt()
-	case *big.Int:
-		mant = x
-	default:
-		d.saveError(&UnmarshalTypeError{Value: "bigfloat", Type: v.Type(), Offset: int64(start)})
-		return nil
-	}
-
-	var f *big.Float
-	if v.Type() == bigFloatType {
-		// reuse the existing big.Float
-		f = v.Addr().Interface().(*big.Float)
-	} else {
-		f = new(big.Float)
-	}
-	f.SetInt(mant)
-	f.SetMantExp(f, int(exp))
-	if v.Type() != bigFloatType {
-		return d.setAny(start, "bigfloat", f, v)
-	}
-	return nil
-}
-
-func (d *decodeState) decodeExpectedBase64URL(start int, v reflect.Value) error {
-	var data any
-	if err := d.decode(&data); err != nil {
-		return err
-	}
-	return d.setAny(start, "expected base64url", ExpectedBase64URL{Content: data}, v)
-}
-
-func (d *decodeState) decodeExpectedBase64(start int, v reflect.Value) error {
-	var data any
-	if err := d.decode(&data); err != nil {
-		return err
-	}
-	return d.setAny(start, "expected base64", ExpectedBase64{Content: data}, v)
-}
-
-func (d *decodeState) decodeExpectedBase16(start int, v reflect.Value) error {
-	var data any
-	if err := d.decode(&data); err != nil {
-		return err
-	}
-	return d.setAny(start, "expected base16", ExpectedBase16{Content: data}, v)
 }
 
 func (d *decodeState) setSimple(start int, s Simple, v reflect.Value) error {

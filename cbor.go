@@ -285,27 +285,67 @@ func (tag Tag) Decode() (any, error) {
 
 	// tag number 5: bigfloat
 	case tagNumberBigfloat:
-		// TODO: implement
+		a, ok := tag.Content.([]any)
+		if !ok {
+			b, ok := tag.Content.([2]any)
+			if !ok {
+				return nil, newSemanticError("cbor: invalid bigfloat")
+			}
+			a = b[:]
+		}
+		if len(a) != 2 {
+			return nil, newSemanticError("cbor: invalid bigfloat")
+		}
+		var exp int64
+		switch x := a[0].(type) {
+		case int64:
+			exp = x
+		case Integer:
+			var err error
+			exp, err = x.Int64()
+			if err != nil {
+				return nil, newSemanticError("cbor: invalid bigfloat")
+			}
+		default:
+			return nil, newSemanticError("cbor: invalid bigfloat")
+		}
+
+		var mant *big.Int
+		switch x := a[1].(type) {
+		case int64:
+			mant = big.NewInt(x)
+		case Integer:
+			mant = x.BigInt()
+		case *big.Int:
+			mant = x
+		default:
+			return nil, newSemanticError("cbor: invalid bigfloat")
+		}
+
+		f := new(big.Float)
+		f.SetInt(mant)
+		f.SetMantExp(f, int(exp))
+		return f, nil
 
 	// tag number 21: expected conversion to base64url
 	case tagNumberExpectedBase64URL:
-		// return d.decodeExpectedBase64URL(start, v)
+		return ExpectedBase64URL{Content: tag.Content}, nil
 
 	// tag number 22: expected conversion to base64
 	case tagNumberExpectedBase64:
-		// return d.decodeExpectedBase64(start, v)
+		return ExpectedBase64{Content: tag.Content}, nil
 
 	// tag number 23: expected conversion to base16
 	case tagNumberExpectedBase16:
-		// return d.decodeExpectedBase16(start, v)
+		return ExpectedBase16{Content: tag.Content}, nil
 
 	// tag number 24: encoded CBOR data item
 	case tagNumberEncodedData:
-		// var data []byte
-		// if err := d.decode(&data); err != nil {
-		// 	return err
-		// }
-		// return d.setAny(start, "encoded data", EncodedData(data), v)
+		b, ok := tag.Content.([]byte)
+		if !ok {
+			return nil, newSemanticError("cbor: invalid encoded data")
+		}
+		return EncodedData(b), nil
 
 	// tag number 32: URI
 	case tagNumberURI:
