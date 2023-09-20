@@ -869,6 +869,91 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
 	})
+
+	t.Run("255 bytes text string", func(t *testing.T) {
+		const l = 255 // length of data
+		const n = 2   // overhead
+		buf := make([]byte, l+n)
+		buf[0] = 0x78
+		buf[1] = byte(l)
+		for i := 0; i < l; i++ {
+			buf[i+n] = 'a'
+		}
+
+		var got any
+		if err := Unmarshal(buf, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := any(string(buf[n:]))
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("256 bytes text string", func(t *testing.T) {
+		const l = 255 // length of data
+		const n = 3   // overhead
+		buf := make([]byte, l+n)
+		buf[0] = 0x79
+		buf[1] = byte(l >> 8)
+		buf[2] = byte(l & 0xff)
+		for i := 0; i < l; i++ {
+			buf[i+n] = 'a'
+		}
+
+		var got any
+		if err := Unmarshal(buf, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := any(string(buf[n:]))
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("65535 bytes string", func(t *testing.T) {
+		const l = 65535 // length of data
+		const n = 3     // overhead
+		buf := make([]byte, l+n)
+		buf[0] = 0x79
+		buf[1] = byte(l >> 8)
+		buf[2] = byte(l & 0xff)
+		for i := 0; i < l; i++ {
+			buf[i+3] = 'a'
+		}
+
+		var got any
+		if err := Unmarshal(buf, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := any(string(buf[n:]))
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("65536 bytes string", func(t *testing.T) {
+		const l = 65535 // length of data
+		const n = 5     // overhead
+		buf := make([]byte, l+n)
+		buf[0] = 0x7a
+		buf[1] = byte(l >> 24)
+		buf[2] = byte(l >> 16)
+		buf[3] = byte(l >> 8)
+		buf[4] = byte(l & 0xff)
+		for i := 0; i < l; i++ {
+			buf[i+n] = 'a'
+		}
+
+		var got any
+		if err := Unmarshal(buf, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := any(string(buf[n:]))
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
 }
 
 func TestUnmarshal_Time(t *testing.T) {
