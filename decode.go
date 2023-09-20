@@ -1094,6 +1094,7 @@ func (d *decodeState) decodeArray(start int, n uint64, u Unmarshaler, v reflect.
 		}
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
+
 	switch v.Kind() {
 	case reflect.Slice:
 		if c := uint64(v.Cap()); c < n || (c == 0 && n == 0) {
@@ -1173,6 +1174,7 @@ func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.
 		}
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
+
 	switch v.Kind() {
 	case reflect.Slice:
 		i := 0
@@ -1206,7 +1208,6 @@ func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.
 		}
 
 	case reflect.Interface:
-		// Decoding into nil interface? Switch to non-reflect code.
 		if v.NumMethod() != 0 {
 			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
 		}
@@ -1228,7 +1229,16 @@ func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.
 			}
 			s = append(s, e)
 		}
-		v.Set(reflect.ValueOf(s))
+		if d.decodingKeys {
+			// slices cannot be used as map keys; fall back to array.
+			rv := reflect.New(reflect.ArrayOf(len(s), anyType)).Elem()
+			for i, e := range s {
+				rv.Index(i).Set(reflect.ValueOf(e))
+			}
+			v.Set(rv)
+		} else {
+			v.Set(reflect.ValueOf(s))
+		}
 
 	case reflect.Struct:
 		st := cachedStructType(v.Type())
