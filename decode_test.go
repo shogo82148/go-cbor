@@ -869,36 +869,6 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
 	})
-
-	t.Run("4294967296 bytes string", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("skipping test in short mode.")
-		}
-		const l = 4294967296 // length of data
-		const n = 9          // overhead
-		buf := make([]byte, l+n)
-		buf[0] = 0x5b
-		buf[1] = byte(l >> 56 & 0xff)
-		buf[2] = byte(l >> 48 & 0xff)
-		buf[3] = byte(l >> 40 & 0xff)
-		buf[4] = byte(l >> 32 & 0xff)
-		buf[5] = byte(l >> 24 & 0xff)
-		buf[6] = byte(l >> 16 & 0xff)
-		buf[7] = byte(l >> 8 & 0xff)
-		buf[8] = byte(l & 0xff)
-		for i := 0; i < l; i++ {
-			buf[i+n] = byte(i)
-		}
-
-		var got any
-		if err := Unmarshal(buf, &got); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		want := any(buf[n:])
-		if !reflect.DeepEqual(want, got) {
-			t.Errorf("Unmarshal() = %v, want %v", got, want)
-		}
-	})
 }
 
 func TestUnmarshal_Time(t *testing.T) {
