@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"math/big"
+	"math/bits"
 	"net/url"
 	"reflect"
 	"slices"
@@ -107,6 +108,77 @@ func (i Integer) BigInt() *big.Int {
 		v.Sub(minusOne, v)
 	}
 	return v
+}
+
+func (i Integer) MarshalJSON() ([]byte, error) {
+	var buf []byte
+	if i.Sign {
+		if i.Value == math.MaxUint64 {
+			return []byte(`-18446744073709551616`), nil
+		}
+		buf = append(buf, '-')
+		return strconv.AppendUint(buf, i.Value+1, 10), nil
+	} else {
+		return strconv.AppendUint(buf, i.Value, 10), nil
+	}
+}
+
+func (i *Integer) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 {
+		return errors.New("cbor: empty JSON string")
+	}
+	if b[0] == '-' {
+		i.Sign = true
+		b = b[1:]
+	} else if b[0] == '+' {
+		i.Sign = false
+		b = b[1:]
+	} else if '0' <= b[0] && b[0] <= '9' {
+		i.Sign = false
+	} else {
+		return errors.New("cbor: invalid JSON string")
+	}
+
+	// parse the integer as uint128
+	var hi, lo uint64
+	for _, c := range b {
+		var carry uint64
+		if c < '0' || '9' < c {
+			return errors.New("cbor: invalid JSON string")
+		}
+		d := int64(c - '0')
+
+		// hi, lo = (hi, lo) * 10 + d
+		h, l := bits.Mul64(lo, 10)
+		hi += h
+		lo, carry = bits.Add64(l, uint64(d), 0)
+		hi, _ = bits.Add64(hi, 0, carry)
+
+		if hi > 0 && lo > 0 {
+			return errors.New("cbor: integer overflow")
+		}
+	}
+
+	if i.Sign {
+		if lo == 0 && hi == 0 {
+			i.Sign = false
+			i.Value = 0
+			return nil
+		}
+		var borrow uint64
+		lo, borrow = bits.Sub64(lo, 1, 0)
+		hi, _ = bits.Sub64(hi, 0, borrow)
+		if hi > 0 {
+			return errors.New("cbor: integer overflow")
+		}
+		i.Value = lo
+	} else {
+		if hi > 0 {
+			return errors.New("cbor: integer overflow")
+		}
+		i.Value = lo
+	}
+	return nil
 }
 
 // EncodedData is a CBOR encoded data.
