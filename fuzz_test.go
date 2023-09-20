@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"reflect"
 	"testing"
 	"time"
@@ -53,7 +54,7 @@ func FuzzUnmarshal(f *testing.F) {
 				if err != nil {
 					w0 = []byte("ERR! " + err.Error())
 				}
-				t.Errorf("%x: Unmarshal() mismatch: %s != %s", a, v0, w0)
+				t.Errorf("%x -> %x: Unmarshal() mismatch: %s != %s", a, b, v0, w0)
 			}
 
 			c, err := Marshal(w)
@@ -61,7 +62,7 @@ func FuzzUnmarshal(f *testing.F) {
 				t.Error(err)
 			}
 			if diff := gocmp.Diff(b, c); diff != "" {
-				t.Errorf("%x: Marshal() mismatch (-want +got):\n%s", a, diff)
+				t.Errorf("%x -> %x: Marshal() mismatch (-want +got):\n%s", a, b, diff)
 			}
 		}
 	})
@@ -191,7 +192,13 @@ func deepEqualRV(rx, ry reflect.Value) bool {
 
 	switch rx.Type() {
 	case timeType:
-		return rx.Interface().(time.Time).Equal(ry.Interface().(time.Time))
+		x := rx.Interface().(time.Time)
+		y := ry.Interface().(time.Time)
+		return x.Equal(y)
+	case urlType:
+		x := rx.Addr().Interface().(*url.URL)
+		y := ry.Addr().Interface().(*url.URL)
+		return x.String() == y.String()
 	}
 
 	switch rx.Kind() {
