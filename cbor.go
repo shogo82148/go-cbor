@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// epoch time for 10000-01-01T00:00:00Z
+const year10000 = 253402300800
+
 var anySliceType = reflect.TypeOf([]any(nil))
 var anyType = reflect.TypeOf((*any)(nil)).Elem()
 var bigFloatType = reflect.TypeOf(big.Float{})

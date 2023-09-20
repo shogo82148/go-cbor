@@ -1775,18 +1775,18 @@ func (d *decodeState) decodeEpochDatetime(start int, v reflect.Value) error {
 	var t time.Time
 	switch epoch := epoch.(type) {
 	case int64:
-		if epoch < 0 {
+		if epoch < 0 || epoch >= year10000 {
 			return newSemanticError("cbor: invalid range of datetime")
 		}
 		t = time.Unix(epoch, 0)
 	case Integer:
 		i, err := epoch.Int64()
-		if err != nil || i < 0 {
+		if err != nil || i < 0 || i >= year10000 {
 			return wrapSemanticError("cbor: invalid range of datetime", err)
 		}
 		t = time.Unix(i, 0)
 	case float64:
-		if epoch < 0 {
+		if epoch < 0 || epoch >= year10000 {
 			return newSemanticError("cbor: invalid range of datetime")
 		}
 		i, f := math.Modf(epoch)

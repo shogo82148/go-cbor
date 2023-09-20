@@ -668,6 +668,16 @@ func TestMarshal(t *testing.T) {
 			time.Unix(1363896240, 500_000_000).UTC(),
 			[]byte{0xc1, 0xfb, 0x41, 0xd4, 0x52, 0xd9, 0xec, 0x20, 0x00, 0x00},
 		},
+		{
+			"zero time",
+			time.Time{},
+			[]byte{0xf7}, // undefined
+		},
+		{
+			"year 10,000",
+			time.Date(10_000, 1, 1, 0, 0, 0, 0, time.UTC),
+			[]byte{0xf7}, // undefined
+		},
 
 		// known tag types
 		{
