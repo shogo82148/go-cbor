@@ -104,6 +104,52 @@ func TestInteger_String(t *testing.T) {
 	}
 }
 
+func TestInteger_MarshalJSON(t *testing.T) {
+	tests := []struct {
+		i    Integer
+		want string
+	}{
+		{Integer{Sign: false, Value: 0}, "0"},
+		{Integer{Sign: false, Value: math.MaxUint64}, "18446744073709551615"},
+		{Integer{Sign: true, Value: 0}, "-1"},
+		{Integer{Sign: true, Value: math.MaxUint64 - 1}, "-18446744073709551615"},
+		{Integer{Sign: true, Value: math.MaxUint64}, "-18446744073709551616"},
+	}
+
+	for _, tt := range tests {
+		got, err := tt.i.MarshalJSON()
+		if err != nil {
+			t.Errorf("Integer.MarshalJSON() = %v, want nil", err)
+		}
+		if string(got) != tt.want {
+			t.Errorf("Integer.MarshalJSON() = %v, want %v", string(got), tt.want)
+		}
+	}
+}
+
+func TestInteger_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		s    string
+		want Integer
+	}{
+		// {"0", Integer{Sign: false, Value: 0}},
+		// {"18446744073709551615", Integer{Sign: false, Value: math.MaxUint64}},
+		{"-1", Integer{Sign: true, Value: 0}},
+		{"-18446744073709551615", Integer{Sign: true, Value: math.MaxUint64 - 1}},
+		{"-18446744073709551616", Integer{Sign: true, Value: math.MaxUint64}},
+	}
+
+	for _, tt := range tests {
+		var i Integer
+		if err := i.UnmarshalJSON([]byte(tt.s)); err != nil {
+			t.Errorf("Integer.UnmarshalJSON() = %v, want nil", err)
+		}
+		if i != tt.want {
+			t.Errorf("Integer.UnmarshalJSON() = %v, want %v", i, tt.want)
+		}
+	}
+}
+
 func TestInteger_BigInt(t *testing.T) {
 	tests := []struct {
 		i    Integer
