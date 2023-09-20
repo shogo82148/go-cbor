@@ -999,7 +999,7 @@ func (d *decodeState) decodeString(start int, n uint64, u Unmarshaler, v reflect
 	}
 
 	if !utf8.Valid(d.data[off:d.off]) {
-		return d.newSyntaxError("cbor: invalid UTF-8 string")
+		return newSemanticError("cbor: invalid UTF-8 string")
 	}
 	s := string(d.data[off:d.off])
 	return d.setString(start, s, v)
