@@ -1597,6 +1597,23 @@ func TestUnmarshal_SemanticError(t *testing.T) {
 		}
 	})
 
+	t.Run("year 10,000", func(t *testing.T) {
+		data := []byte{
+			0xc1,                                           // tag(0)
+			0x1b,                                           // uint64
+			0x00, 0x00, 0x00, 0x3a, 0xff, 0xf4, 0x41, 0x80, // = year10000
+		}
+
+		var v any
+		err := Unmarshal(data, &v)
+		se, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
+		} else if se.msg != "cbor: invalid range of datetime" {
+			t.Errorf("unexpected message: got %q, want %q", se.msg, "cbor: invalid range of datetime")
+		}
+	})
+
 	t.Run("invalid UTF-8 string", func(t *testing.T) {
 		data := []byte{
 			0x63, 0x61, 0xff, 0x62, // "a\xffb"
