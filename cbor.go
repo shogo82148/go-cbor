@@ -130,6 +130,9 @@ func (i *Integer) UnmarshalJSON(b []byte) error {
 	if b[0] == '-' {
 		i.Sign = true
 		b = b[1:]
+	} else if b[0] == '+' {
+		i.Sign = false
+		b = b[1:]
 	} else if '0' <= b[0] && b[0] <= '9' {
 		i.Sign = false
 	} else {
@@ -155,6 +158,7 @@ func (i *Integer) UnmarshalJSON(b []byte) error {
 			return errors.New("cbor: integer overflow")
 		}
 	}
+
 	if i.Sign {
 		if lo == 0 && hi == 0 {
 			i.Sign = false
@@ -167,7 +171,7 @@ func (i *Integer) UnmarshalJSON(b []byte) error {
 		if hi > 0 {
 			return errors.New("cbor: integer overflow")
 		}
-		i.Value = lo - 1
+		i.Value = lo
 	} else {
 		if hi > 0 {
 			return errors.New("cbor: integer overflow")

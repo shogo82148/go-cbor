@@ -132,8 +132,12 @@ func TestInteger_UnmarshalJSON(t *testing.T) {
 		s    string
 		want Integer
 	}{
-		// {"0", Integer{Sign: false, Value: 0}},
-		// {"18446744073709551615", Integer{Sign: false, Value: math.MaxUint64}},
+		{"0", Integer{Sign: false, Value: 0}},
+		{"-0", Integer{Sign: false, Value: 0}},
+		{"+0", Integer{Sign: false, Value: 0}},
+		{"1", Integer{Sign: false, Value: 1}},
+		{"+1", Integer{Sign: false, Value: 1}},
+		{"18446744073709551615", Integer{Sign: false, Value: math.MaxUint64}},
 		{"-1", Integer{Sign: true, Value: 0}},
 		{"-18446744073709551615", Integer{Sign: true, Value: math.MaxUint64 - 1}},
 		{"-18446744073709551616", Integer{Sign: true, Value: math.MaxUint64}},
@@ -146,6 +150,24 @@ func TestInteger_UnmarshalJSON(t *testing.T) {
 		}
 		if i != tt.want {
 			t.Errorf("Integer.UnmarshalJSON() = %v, want %v", i, tt.want)
+		}
+	}
+}
+
+func TestInteger_UnmarshalJSON_error(t *testing.T) {
+	tests := []string{
+		"",
+		"a",
+		"-a",
+		"18446744073709551616",  // overflow
+		"-18446744073709551617", // overflow
+	}
+
+	for _, tt := range tests {
+		var i Integer
+		err := i.UnmarshalJSON([]byte(tt))
+		if err == nil {
+			t.Errorf("Integer.UnmarshalJSON() = nil, want error")
 		}
 	}
 }
