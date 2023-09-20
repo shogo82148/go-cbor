@@ -1752,7 +1752,10 @@ func (d *decodeState) decodeDatetimeString(start int, v reflect.Value) error {
 	}
 	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
-		return err
+		return wrapSemanticError("cbor: invalid datetime string", err)
+	}
+	if t.Unix() < 0 {
+		return newSemanticError("cbor: invalid range of datetime")
 	}
 	return d.setAny(start, "time", t, v)
 }
@@ -1766,14 +1769,20 @@ func (d *decodeState) decodeEpochDatetime(start int, v reflect.Value) error {
 	var t time.Time
 	switch epoch := epoch.(type) {
 	case int64:
+		if epoch < 0 {
+			return newSemanticError("cbor: invalid range of datetime")
+		}
 		t = time.Unix(epoch, 0)
 	case Integer:
 		i, err := epoch.Int64()
-		if err != nil {
-			return err
+		if err != nil || i < 0 {
+			return wrapSemanticError("cbor: invalid range of datetime", err)
 		}
 		t = time.Unix(i, 0)
 	case float64:
+		if epoch < 0 {
+			return newSemanticError("cbor: invalid range of datetime")
+		}
 		i, f := math.Modf(epoch)
 		t = time.Unix(int64(i), int64(f*1e9))
 	default:

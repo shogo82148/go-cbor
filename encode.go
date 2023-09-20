@@ -344,10 +344,18 @@ func simpleEncoder(e *encodeState, v reflect.Value) error {
 }
 
 func timeEncoder(e *encodeState, v reflect.Value) error {
-	e.writeByte(0xc1) // tag 1: epoch-based date/time
 	t := v.Interface().(time.Time)
-	epoch := float64(t.UnixNano()) / 1e9
-	return e.encodeFloat64(epoch)
+	if t.IsZero() {
+		return e.encodeUndefined()
+	}
+	epoch := t.Unix()
+	nano := t.Nanosecond()
+	if epoch < 0 {
+		return e.encodeUndefined()
+	}
+
+	e.writeByte(0xc1) // tag 1: epoch-based date/time
+	return e.encodeFloat64(float64(epoch) + float64(nano)/1e9)
 }
 
 func urlEncoder(e *encodeState, v reflect.Value) error {
@@ -416,8 +424,7 @@ func newExpectedEncoder(n TagNumber, t reflect.Type) encoderFunc {
 }
 
 func undefinedEncoder(e *encodeState, v reflect.Value) error {
-	e.writeByte(0xf7)
-	return nil
+	return e.encodeUndefined()
 }
 
 func sliceEncoder(e *encodeState, v reflect.Value) error {
@@ -734,6 +741,11 @@ func (s *encodeState) encodeBool(v bool) error {
 
 func (s *encodeState) encodeNull() error {
 	s.writeByte(0xf6) // null
+	return nil
+}
+
+func (s *encodeState) encodeUndefined() error {
+	s.writeByte(0xf7) // undefined
 	return nil
 }
 
