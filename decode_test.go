@@ -688,6 +688,244 @@ var unmarshalTests = []struct {
 		ptr(any(Base64URLString("8J-No_Cfjbo"))),
 	},
 
+	// byte strings
+	{
+		"uint8_t length byte string",
+		[]byte{
+			0x58, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+	{
+		"uint16_t length byte string",
+		[]byte{
+			0x59, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+	{
+		"uint32_t length byte string",
+		[]byte{
+			0x5a, 0x00, 0x00, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+	{
+		"uint64_t length byte string",
+		[]byte{
+			0x5b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+	{
+		"indefinite-length multi-chunk byte string",
+		[]byte{
+			0x5f, // start indefinite-length byte string
+
+			// first chunk
+			0x40, // empty byte string
+
+			// second chunk
+			0x58, 0x01,
+			0x01,
+
+			// third chunk
+			0x59, 0x00, 0x01,
+			0x02,
+
+			// fourth chunk
+			0x5a, 0x00, 0x00, 0x00, 0x01,
+			0x03,
+
+			// fifth chunk
+			0x5b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+			0x04,
+
+			0xff, // break
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
+
+	// text strings
+	{
+		"uint8_t length byte string",
+		[]byte{
+			0x78, 0x04,
+			0x61, 0x62, 0x63, 0x64,
+		},
+		new(any),
+		ptr(any("abcd")),
+	},
+	{
+		"uint16_t length byte string",
+		[]byte{
+			0x79, 0x00, 0x04,
+			0x61, 0x62, 0x63, 0x64,
+		},
+		new(any),
+		ptr(any("abcd")),
+	},
+	{
+		"uint32_t length byte string",
+		[]byte{
+			0x7a, 0x00, 0x00, 0x00, 0x04,
+			0x61, 0x62, 0x63, 0x64,
+		},
+		new(any),
+		ptr(any("abcd")),
+	},
+	{
+		"uint64_t length byte string",
+		[]byte{
+			0x7b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+			0x61, 0x62, 0x63, 0x64,
+		},
+		new(any),
+		ptr(any("abcd")),
+	},
+	{
+		"indefinite-length multi-chunk text string",
+		[]byte{
+			0x7f, // start indefinite-length byte string
+
+			// first chunk
+			0x60, // empty byte string
+
+			// second chunk
+			0x78, 0x01,
+			0xf0,
+
+			// third chunk
+			0x79, 0x00, 0x01,
+			0x9f,
+
+			// fourth chunk
+			0x7a, 0x00, 0x00, 0x00, 0x01,
+			0x8d,
+
+			// fifth chunk
+			0x7b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+			0xa3,
+
+			0xff, // break
+		},
+		new(any),
+		ptr(any("🍣")),
+	},
+
+	// arrays
+	{
+		"uint8_t length array",
+		[]byte{
+			0x98, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
+	},
+	{
+		"uint16_t length array",
+		[]byte{
+			0x99, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
+	},
+	{
+		"uint32_t length array",
+		[]byte{
+			0x9a, 0x00, 0x00, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
+	},
+	{
+		"uint64_t length array",
+		[]byte{
+			0x9b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(any),
+		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
+	},
+
+	{
+		"uint8_t length map",
+		[]byte{
+			0xb8, 0x02,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(map[int64]int64),
+		ptr(map[int64]int64{1: 2, 3: 4}),
+	},
+	{
+		"uint16_t length map",
+		[]byte{
+			0xb9, 0x00, 0x02,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(map[int64]int64),
+		ptr(map[int64]int64{1: 2, 3: 4}),
+	},
+	{
+		"uint32_t length map",
+		[]byte{
+			0xba, 0x00, 0x00, 0x00, 0x02,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(map[int64]int64),
+		ptr(map[int64]int64{1: 2, 3: 4}),
+	},
+	{
+		"uint64_t length map",
+		[]byte{
+			0xbb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+			0x01, 0x02, 0x03, 0x04,
+		},
+		new(map[int64]int64),
+		ptr(map[int64]int64{1: 2, 3: 4}),
+	},
+
+	// tags
+	{
+		"uint16_t tag number",
+		[]byte{
+			0xd9, 0xd9, 0xf7, // tag 55799: self-describe CBOR
+			0x64, 0x49, 0x45, 0x54, 0x46, // "IETF"
+		},
+		new(any),
+		ptr(any("IETF")),
+	},
+	{
+		"uint32_t tag number",
+		[]byte{
+			0xda, 0x00, 0x00, 0xd9, 0xf7, // tag 55799: self-describe CBOR
+			0x64, 0x49, 0x45, 0x54, 0x46, // "IETF"
+		},
+		new(any),
+		ptr(any("IETF")),
+	},
+	{
+		"uint64_t tag number",
+		[]byte{
+			0xdb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xd9, 0xf7, // tag 55799: self-describe CBOR
+			0x64, 0x49, 0x45, 0x54, 0x46, // "IETF"
+		},
+		new(any),
+		ptr(any("IETF")),
+	},
+
 	// self-describe CBOR
 	{
 		"self-describe CBOR",
@@ -796,194 +1034,6 @@ func TestUnmarshal_Unmarshaler(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestUnmarshal_DecodeLargeInput(t *testing.T) {
-	t.Run("255 bytes string", func(t *testing.T) {
-		const l = 255 // length of data
-		const n = 2   // overhead
-		buf := make([]byte, l+n)
-		buf[0] = 0x58
-		buf[1] = byte(l)
-		for i := 0; i < l; i++ {
-			buf[i+n] = byte(i)
-		}
-
-		var got any
-		if err := Unmarshal(buf, &got); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		want := any(buf[n:])
-		if !reflect.DeepEqual(want, got) {
-			t.Errorf("Unmarshal() = %v, want %v", got, want)
-		}
-
-		testUnexpectedEnd(t, buf)
-	})
-
-	t.Run("256 bytes string", func(t *testing.T) {
-		const l = 255 // length of data
-		const n = 3   // overhead
-		buf := make([]byte, l+n)
-		buf[0] = 0x59
-		buf[1] = byte(l >> 8)
-		buf[2] = byte(l & 0xff)
-		for i := 0; i < l; i++ {
-			buf[i+n] = byte(i)
-		}
-
-		var got any
-		if err := Unmarshal(buf, &got); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		want := any(buf[n:])
-		if !reflect.DeepEqual(want, got) {
-			t.Errorf("Unmarshal() = %v, want %v", got, want)
-		}
-
-		testUnexpectedEnd(t, buf)
-	})
-
-	t.Run("65535 bytes string", func(t *testing.T) {
-		const l = 65535 // length of data
-		const n = 3     // overhead
-		buf := make([]byte, l+n)
-		buf[0] = 0x59
-		buf[1] = byte(l >> 8)
-		buf[2] = byte(l & 0xff)
-		for i := 0; i < l; i++ {
-			buf[i+3] = byte(i)
-		}
-
-		var got any
-		if err := Unmarshal(buf, &got); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		want := any(buf[n:])
-		if !reflect.DeepEqual(want, got) {
-			t.Errorf("Unmarshal() = %v, want %v", got, want)
-		}
-
-		testUnexpectedEnd(t, buf)
-	})
-
-	t.Run("65536 bytes string", func(t *testing.T) {
-		const l = 65535 // length of data
-		const n = 5     // overhead
-		buf := make([]byte, l+n)
-		buf[0] = 0x5a
-		buf[1] = byte(l >> 24)
-		buf[2] = byte(l >> 16)
-		buf[3] = byte(l >> 8)
-		buf[4] = byte(l & 0xff)
-		for i := 0; i < l; i++ {
-			buf[i+n] = byte(i)
-		}
-
-		var got any
-		if err := Unmarshal(buf, &got); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		want := any(buf[n:])
-		if !reflect.DeepEqual(want, got) {
-			t.Errorf("Unmarshal() = %v, want %v", got, want)
-		}
-
-		testUnexpectedEnd(t, buf)
-	})
-
-	t.Run("255 bytes text string", func(t *testing.T) {
-		const l = 255 // length of data
-		const n = 2   // overhead
-		buf := make([]byte, l+n)
-		buf[0] = 0x78
-		buf[1] = byte(l)
-		for i := 0; i < l; i++ {
-			buf[i+n] = 'a'
-		}
-
-		var got any
-		if err := Unmarshal(buf, &got); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		want := any(string(buf[n:]))
-		if !reflect.DeepEqual(want, got) {
-			t.Errorf("Unmarshal() = %v, want %v", got, want)
-		}
-
-		testUnexpectedEnd(t, buf)
-	})
-
-	t.Run("256 bytes text string", func(t *testing.T) {
-		const l = 255 // length of data
-		const n = 3   // overhead
-		buf := make([]byte, l+n)
-		buf[0] = 0x79
-		buf[1] = byte(l >> 8)
-		buf[2] = byte(l & 0xff)
-		for i := 0; i < l; i++ {
-			buf[i+n] = 'a'
-		}
-
-		var got any
-		if err := Unmarshal(buf, &got); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		want := any(string(buf[n:]))
-		if !reflect.DeepEqual(want, got) {
-			t.Errorf("Unmarshal() = %v, want %v", got, want)
-		}
-
-		testUnexpectedEnd(t, buf)
-	})
-
-	t.Run("65535 bytes string", func(t *testing.T) {
-		const l = 65535 // length of data
-		const n = 3     // overhead
-		buf := make([]byte, l+n)
-		buf[0] = 0x79
-		buf[1] = byte(l >> 8)
-		buf[2] = byte(l & 0xff)
-		for i := 0; i < l; i++ {
-			buf[i+3] = 'a'
-		}
-
-		var got any
-		if err := Unmarshal(buf, &got); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		want := any(string(buf[n:]))
-		if !reflect.DeepEqual(want, got) {
-			t.Errorf("Unmarshal() = %v, want %v", got, want)
-		}
-
-		testUnexpectedEnd(t, buf)
-	})
-
-	t.Run("65536 bytes string", func(t *testing.T) {
-		const l = 65535 // length of data
-		const n = 5     // overhead
-		buf := make([]byte, l+n)
-		buf[0] = 0x7a
-		buf[1] = byte(l >> 24)
-		buf[2] = byte(l >> 16)
-		buf[3] = byte(l >> 8)
-		buf[4] = byte(l & 0xff)
-		for i := 0; i < l; i++ {
-			buf[i+n] = 'a'
-		}
-
-		var got any
-		if err := Unmarshal(buf, &got); err != nil {
-			t.Errorf("Unmarshal() error = %v", err)
-		}
-		want := any(string(buf[n:]))
-		if !reflect.DeepEqual(want, got) {
-			t.Errorf("Unmarshal() = %v, want %v", got, want)
-		}
-
-		testUnexpectedEnd(t, buf)
-	})
 }
 
 func TestUnmarshal_Time(t *testing.T) {
