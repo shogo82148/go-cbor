@@ -116,7 +116,7 @@ func (d *decodeState) init(data []byte) {
 
 func (s *decodeState) readByte() (byte, error) {
 	if !s.isAvailable(1) {
-		return 0, s.newSyntaxError("cbor: unexpected end")
+		return 0, ErrUnexpectedEnd
 	}
 	b := s.data[s.off]
 	s.off++
@@ -125,14 +125,14 @@ func (s *decodeState) readByte() (byte, error) {
 
 func (s *decodeState) peekByte() (byte, error) {
 	if !s.isAvailable(1) {
-		return 0, s.newSyntaxError("cbor: unexpected end")
+		return 0, ErrUnexpectedEnd
 	}
 	return s.data[s.off], nil
 }
 
 func (s *decodeState) readUint16() (uint16, error) {
 	if !s.isAvailable(2) {
-		return 0, s.newSyntaxError("cbor: unexpected end")
+		return 0, ErrUnexpectedEnd
 	}
 	b := binary.BigEndian.Uint16(s.data[s.off:])
 	s.off += 2
@@ -141,7 +141,7 @@ func (s *decodeState) readUint16() (uint16, error) {
 
 func (s *decodeState) readUint32() (uint32, error) {
 	if !s.isAvailable(4) {
-		return 0, s.newSyntaxError("cbor: unexpected end")
+		return 0, ErrUnexpectedEnd
 	}
 	b := binary.BigEndian.Uint32(s.data[s.off:])
 	s.off += 4
@@ -150,7 +150,7 @@ func (s *decodeState) readUint32() (uint32, error) {
 
 func (s *decodeState) readUint64() (uint64, error) {
 	if !s.isAvailable(8) {
-		return 0, s.newSyntaxError("cbor: unexpected end")
+		return 0, ErrUnexpectedEnd
 	}
 	b := binary.BigEndian.Uint64(s.data[s.off:])
 	s.off += 8
@@ -885,7 +885,7 @@ func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
 
 func (d *decodeState) decodeBytes(start int, n uint64, u Unmarshaler, v reflect.Value) error {
 	if !d.isAvailable(n) {
-		return d.newSyntaxError("cbor: unexpected end")
+		return ErrUnexpectedEnd
 	}
 	off := d.off
 	d.off += int(n)
@@ -939,7 +939,7 @@ LOOP:
 			return d.newSyntaxError("cbor: invalid byte string chunk type")
 		}
 		if !d.isAvailable(n) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		if u == nil {
 			s = append(s, d.data[d.off:d.off+int(n)]...)
@@ -984,7 +984,7 @@ func (d *decodeState) setBytes(start int, data []byte, v reflect.Value) error {
 
 func (d *decodeState) decodeString(start int, n uint64, u Unmarshaler, v reflect.Value) error {
 	if !d.isAvailable(n) {
-		return d.newSyntaxError("cbor: unexpected end")
+		return ErrUnexpectedEnd
 	}
 	off := d.off
 	d.off += int(n)
@@ -1048,7 +1048,7 @@ LOOP:
 			return d.newSyntaxError("cbor: invalid byte string chunk type")
 		}
 		if !d.isAvailable(n) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		w.Write(d.data[d.off : d.off+int(n)])
 		d.off += int(n)
@@ -2028,7 +2028,7 @@ func (d *decodeState) checkWellFormedChild() error {
 	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
 		n := uint64(typ - 0x40)
 		if uint64(d.off)+n > uint64(len(d.data)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2039,7 +2039,7 @@ func (d *decodeState) checkWellFormedChild() error {
 			return err
 		}
 		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2050,7 +2050,7 @@ func (d *decodeState) checkWellFormedChild() error {
 			return err
 		}
 		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2061,7 +2061,7 @@ func (d *decodeState) checkWellFormedChild() error {
 			return err
 		}
 		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2072,7 +2072,7 @@ func (d *decodeState) checkWellFormedChild() error {
 			return err
 		}
 		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2099,7 +2099,7 @@ func (d *decodeState) checkWellFormedChild() error {
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
 		n := int(typ - 0x60)
 		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2110,7 +2110,7 @@ func (d *decodeState) checkWellFormedChild() error {
 			return err
 		}
 		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2121,7 +2121,7 @@ func (d *decodeState) checkWellFormedChild() error {
 			return err
 		}
 		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2132,7 +2132,7 @@ func (d *decodeState) checkWellFormedChild() error {
 			return err
 		}
 		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2143,7 +2143,7 @@ func (d *decodeState) checkWellFormedChild() error {
 			return err
 		}
 		if !d.isAvailable(uint64(n)) {
-			return d.newSyntaxError("cbor: unexpected end")
+			return ErrUnexpectedEnd
 		}
 		d.off += int(n)
 
@@ -2406,6 +2406,9 @@ func (d *decodeState) checkWellFormedChild() error {
 
 	return nil
 }
+
+// ErrUnexpectedEnd is returned when the CBOR data ends abruptly.
+var ErrUnexpectedEnd = errors.New("cbor: unexpected end")
 
 // A SyntaxError is a description of a CBOR syntax error.
 // Unmarshal will return a SyntaxError if the CBOR can't be parsed.

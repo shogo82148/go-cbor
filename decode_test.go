@@ -35,6 +35,18 @@ func TestDecodeState_isAvailable(t *testing.T) {
 	}
 }
 
+func testUnexpectedEnd(t *testing.T, input []byte) {
+	t.Helper()
+
+	for i := 1; i < len(input)-1; i++ {
+		var v any
+		err := Unmarshal(input[:i], &v)
+		if err != ErrUnexpectedEnd {
+			t.Errorf("Unmarshal(%x) = %v, want errUnexpectedEnd", input[:i], err)
+		}
+	}
+}
+
 func ptr[T any](v T) *T {
 	return &v
 }
@@ -766,6 +778,8 @@ func TestUnmarshal(t *testing.T) {
 			if diff := cmp.Diff(tt.want, tt.ptr, cmpopts.EquateNaNs()); diff != "" {
 				t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
 			}
+
+			testUnexpectedEnd(t, tt.data)
 		})
 	}
 }
@@ -803,6 +817,8 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, buf)
 	})
 
 	t.Run("256 bytes string", func(t *testing.T) {
@@ -824,6 +840,8 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, buf)
 	})
 
 	t.Run("65535 bytes string", func(t *testing.T) {
@@ -845,6 +863,8 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, buf)
 	})
 
 	t.Run("65536 bytes string", func(t *testing.T) {
@@ -868,6 +888,8 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, buf)
 	})
 
 	t.Run("255 bytes text string", func(t *testing.T) {
@@ -888,6 +910,8 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, buf)
 	})
 
 	t.Run("256 bytes text string", func(t *testing.T) {
@@ -909,6 +933,8 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, buf)
 	})
 
 	t.Run("65535 bytes string", func(t *testing.T) {
@@ -930,6 +956,8 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, buf)
 	})
 
 	t.Run("65536 bytes string", func(t *testing.T) {
@@ -953,6 +981,8 @@ func TestUnmarshal_DecodeLargeInput(t *testing.T) {
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, buf)
 	})
 }
 
@@ -967,6 +997,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !got.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("rfc3339 to any", func(t *testing.T) {
@@ -983,6 +1015,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !tt.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("rfc3339 to interface", func(t *testing.T) {
@@ -1001,6 +1035,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !tt.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("integer epoch", func(t *testing.T) {
@@ -1013,6 +1049,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !got.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("float epoch", func(t *testing.T) {
@@ -1025,6 +1063,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !got.Equal(want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	// https://github.com/shogo82148/go-cbor/pull/67
@@ -1036,6 +1076,8 @@ func TestUnmarshal_Time(t *testing.T) {
 		if !ok {
 			t.Errorf("Unmarshal() error = %v, want UnmarshalTypeError", err)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 }
 
@@ -1050,6 +1092,8 @@ func TestUnmarshal_BigInt(t *testing.T) {
 		if got.Cmp(want) != 0 {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("negative", func(t *testing.T) {
@@ -1062,6 +1106,8 @@ func TestUnmarshal_BigInt(t *testing.T) {
 		if got.Cmp(want) != 0 {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 }
 
@@ -1082,6 +1128,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if got.Cmp(want) != 0 {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("decode to any", func(t *testing.T) {
@@ -1105,6 +1153,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if got.Cmp(want) != 0 {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("long length of array", func(t *testing.T) {
@@ -1119,6 +1169,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err == nil {
 			t.Errorf("Unmarshal() error = nil, want error")
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("short length of array", func(t *testing.T) {
@@ -1130,6 +1182,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err == nil {
 			t.Errorf("Unmarshal() error = nil, want error")
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("invalid type of exponential", func(t *testing.T) {
@@ -1147,6 +1201,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err == nil {
 			t.Errorf("Unmarshal() error = nil, want error")
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 
 	t.Run("invalid type of mant", func(t *testing.T) {
@@ -1160,6 +1216,8 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err == nil {
 			t.Errorf("Unmarshal() error = nil, want error")
 		}
+
+		testUnexpectedEnd(t, input)
 	})
 }
 
