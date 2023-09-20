@@ -865,6 +865,12 @@ func (d *decodeState) decodeFloat64(start int, w uint64, v reflect.Value) error 
 }
 
 func (d *decodeState) decodeFloat(start int, f float64, v reflect.Value) error {
+	if d.decodingKeys && math.IsNaN(f) {
+		// NaN deceives the duplicate check of the Map.
+		// So, we don't accept NaN as a key of the Map.
+		return newSemanticError("cbor: cannot use NaN as a map key")
+	}
+
 	switch v.Kind() {
 	case reflect.Float32, reflect.Float64:
 		if v.OverflowFloat(f) {
