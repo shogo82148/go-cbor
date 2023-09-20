@@ -725,6 +725,35 @@ var unmarshalTests = []struct {
 		new(any),
 		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
 	},
+	{
+		"indefinite-length multi-chunk byte string",
+		[]byte{
+			0x5f, // start indefinite-length byte string
+
+			// first chunk
+			0x40, // empty byte string
+
+			// second chunk
+			0x58, 0x01,
+			0x01,
+
+			// third chunk
+			0x59, 0x00, 0x01,
+			0x02,
+
+			// fourth chunk
+			0x5a, 0x00, 0x00, 0x00, 0x01,
+			0x03,
+
+			// fifth chunk
+			0x5b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+			0x04,
+
+			0xff, // break
+		},
+		new(any),
+		ptr(any([]byte{0x01, 0x02, 0x03, 0x04})),
+	},
 
 	// text strings
 	{
@@ -762,6 +791,35 @@ var unmarshalTests = []struct {
 		},
 		new(any),
 		ptr(any("abcd")),
+	},
+	{
+		"indefinite-length multi-chunk text string",
+		[]byte{
+			0x7f, // start indefinite-length byte string
+
+			// first chunk
+			0x60, // empty byte string
+
+			// second chunk
+			0x78, 0x01,
+			0xf0,
+
+			// third chunk
+			0x79, 0x00, 0x01,
+			0x9f,
+
+			// fourth chunk
+			0x7a, 0x00, 0x00, 0x00, 0x01,
+			0x8d,
+
+			// fifth chunk
+			0x7b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+			0xa3,
+
+			0xff, // break
+		},
+		new(any),
+		ptr(any("🍣")),
 	},
 
 	// arrays
