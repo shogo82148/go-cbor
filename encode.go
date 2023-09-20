@@ -490,6 +490,12 @@ func mapEncoder(e *encodeState, v reflect.Value) error {
 	for _, key := range keys {
 		e.buf.Write(key.encoded)
 		value := v.MapIndex(key.key)
+		if !value.IsValid() {
+			// In this case, the key contains NaN.
+			// NaN deceives the duplicate check of the Map.
+			// So, we don't accept NaN as a key of the Map.
+			return &UnsupportedValueError{v, fmt.Sprintf("cbor: map contains invalid value %s", key.key.Type())}
+		}
 		if err := e.encodeReflectValue(value); err != nil {
 			return err
 		}

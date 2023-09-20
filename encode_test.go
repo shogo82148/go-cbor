@@ -654,6 +654,13 @@ func TestMarshal(t *testing.T) {
 			},
 			[]byte{0xa1, 0x61, 0x30, 0xe2},
 		},
+		{
+			"nil in map",
+			map[string]any{
+				"0": nil,
+			},
+			[]byte{0xa1, 0x61, 0x30, 0xf6},
+		},
 
 		// datetime
 		{
@@ -797,6 +804,35 @@ func TestMarshal(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMarshal_NaN(t *testing.T) {
+	nan := math.NaN()
+
+	t.Run("NaN", func(t *testing.T) {
+		// NaN deceives the duplicate check of the Map.
+		// So, we don't accept NaN as a key of the Map.
+		input := map[float64]int{
+			nan: 1,
+			nan: 2,
+		}
+		_, err := Marshal(input)
+		_, ok := err.(*UnsupportedValueError)
+		if !ok {
+			t.Errorf("Marshal() error = %v, want UnsupportedValueError", err)
+		}
+	})
+
+	t.Run("NaN in array", func(t *testing.T) {
+		input := map[[2]float64]int{
+			{nan, 1}: 1,
+		}
+		_, err := Marshal(input)
+		_, ok := err.(*UnsupportedValueError)
+		if !ok {
+			t.Errorf("Marshal() error = %v, want UnsupportedValueError", err)
+		}
+	})
 }
 
 func BenchmarkMarshal_Uint64(b *testing.B) {
