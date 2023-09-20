@@ -3,6 +3,7 @@ package cbor
 import (
 	"bytes"
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
@@ -44,7 +45,15 @@ func FuzzUnmarshal(f *testing.F) {
 				t.Error(err)
 			}
 			if !deepEqualLite(v, w) {
-				t.Errorf("%x: Unmarshal() mismatch: %#v != %#v", a, v, w)
+				v0, err := json.Marshal(v)
+				if err != nil {
+					v0 = []byte("ERR! " + err.Error())
+				}
+				w0, err := json.Marshal(w)
+				if err != nil {
+					w0 = []byte("ERR! " + err.Error())
+				}
+				t.Errorf("%x: Unmarshal() mismatch: %s != %s", a, v0, w0)
 			}
 
 			c, err := Marshal(w)
@@ -103,7 +112,15 @@ func FuzzDecode(f *testing.F) {
 					t.Error(err)
 				}
 				if !deepEqualLite(v, w) {
-					t.Errorf("%x: Unmarshal() mismatch: %#v != %#v", a, v, w)
+					v0, err := json.Marshal(v)
+					if err != nil {
+						v0 = []byte("ERR! " + err.Error())
+					}
+					w0, err := json.Marshal(w)
+					if err != nil {
+						w0 = []byte("ERR! " + err.Error())
+					}
+					t.Errorf("%x: Unmarshal() mismatch: %s != %s", a, v0, w0)
 				}
 
 				c, err := Marshal(w)
