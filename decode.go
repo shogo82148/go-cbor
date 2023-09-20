@@ -2,18 +2,15 @@ package cbor
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"io"
 	"math"
 	"math/big"
 	"math/bits"
-	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 )
 
@@ -543,81 +540,9 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		return d.decodeMapIndefinite(start, u, v)
 
 	// tags
-	case 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4:
+	case 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
 		n := TagNumber(typ - 0xc0)
 		return d.decodeTag(start, n, u, v)
-
-	// fast path for tag number 0: Standard date/time string
-	case 0xc0:
-		if u != nil || v.Type() == tagType {
-			n := TagNumber(typ - 0xc0)
-			return d.decodeTag(start, n, u, v)
-		}
-		return d.decodeDatetimeString(start, v)
-
-	// fast path for tag number 1: Epoch-based date/time
-	case 0xc1:
-		if u != nil || v.Type() == tagType {
-			n := TagNumber(typ - 0xc0)
-			return d.decodeTag(start, n, u, v)
-		}
-		return d.decodeEpochDatetime(start, v)
-
-	// fast path for tag number 2: Positive bignum
-	case 0xc2:
-		if u != nil || v.Type() == tagType {
-			n := TagNumber(typ - 0xc0)
-			return d.decodeTag(start, n, u, v)
-		}
-		return d.decodePositiveBignum(start, v)
-
-	// fast path for tag number 3: Negative bignum
-	case 0xc3:
-		if u != nil || v.Type() == tagType {
-			n := TagNumber(typ - 0xc0)
-			return d.decodeTag(start, n, u, v)
-		}
-		return d.decodeNegativeBignum(start, v)
-
-	// fast path for tag number 4: Decimal fraction
-	case 0xc4:
-		if u != nil || v.Type() == tagType {
-			n := TagNumber(typ - 0xc0)
-			return d.decodeTag(start, n, u, v)
-		}
-		return d.decodeDecimalFraction(start, v)
-
-	// fast path for tag number 5: Bigfloat
-	case 0xc5:
-		if u != nil || v.Type() == tagType {
-			n := TagNumber(typ - 0xc0)
-			return d.decodeTag(start, n, u, v)
-		}
-		return d.decodeBigFloat(start, v)
-
-	// fast path for tag number 21: Expected conversion to base64url encoding
-	case 0xd5:
-		if u != nil || v.Type() == tagType {
-			n := TagNumber(typ - 0xc0)
-			return d.decodeTag(start, n, u, v)
-		}
-		return d.decodeExpectedBase64URL(start, v)
-
-	// fast path for tag number 22: Expected conversion to base64 encoding
-	case 0xd6:
-		if u != nil || v.Type() == tagType {
-			n := TagNumber(typ - 0xc0)
-			return d.decodeTag(start, n, u, v)
-		}
-		return d.decodeExpectedBase64(start, v)
-
-	// fast path for tag number 23: Expected conversion to base16 encoding
-	case 0xd7:
-		if u != nil || v.Type() == tagType {
-			n := TagNumber(typ - 0xc0)
-			return d.decodeTag(start, n, u, v)
-		}
-		return d.decodeExpectedBase16(start, v)
 
 	// 1 bytes of tag number follow
 	case 0xd8:
@@ -1646,197 +1571,21 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
 
-	if v.Type() == tagType {
-		var content any
-		if err := d.decode(&content); err != nil {
-			return err
-		}
-		v.Set(reflect.ValueOf(Tag{Number: n, Content: content}))
-		return nil
-	}
-
-	// known tags
-	switch n {
-	// tag number 0: date/time string
-	case tagNumberDatetimeString:
-		return d.decodeDatetimeString(start, v)
-
-	// tag number 1: epoch-based date/time
-	case tagNumberEpochDatetime:
-		return d.decodeEpochDatetime(start, v)
-
-	// tag number 2: positive bignum
-	case tagNumberPositiveBignum:
-		return d.decodePositiveBignum(start, v)
-
-	// tag number 3: negative bignum
-	case tagNumberNegativeBignum:
-		return d.decodeNegativeBignum(start, v)
-
-	// tag number 4: decimal fraction
-	case tagNumberDecimalFraction:
-		return d.decodeDecimalFraction(start, v)
-
-	// tag number 5: bigfloat
-	case tagNumberBigfloat:
-		return d.decodeBigFloat(start, v)
-
-	// tag number 21: expected conversion to base64url
-	case tagNumberExpectedBase64URL:
-		return d.decodeExpectedBase64URL(start, v)
-
-	// tag number 22: expected conversion to base64
-	case tagNumberExpectedBase64:
-		return d.decodeExpectedBase64(start, v)
-
-	// tag number 23: expected conversion to base16
-	case tagNumberExpectedBase16:
-		return d.decodeExpectedBase16(start, v)
-
-	// tag number 24: encoded CBOR data item
-	case tagNumberEncodedData:
-		var data []byte
-		if err := d.decode(&data); err != nil {
-			return err
-		}
-		return d.setAny(start, "encoded data", EncodedData(data), v)
-
-	// tag number 32: URI
-	case tagNumberURI:
-		var s string
-		if err := d.decode(&s); err != nil {
-			return err
-		}
-		u, err := url.Parse(s)
-		if err != nil {
-			return wrapSemanticError("cbor: invalid URI", err)
-		}
-		return d.setAny(start, "uri", u, v)
-
-	// tag number 33: base64url
-	case tagNumberBase64URL:
-		var s string
-		if err := d.decode(&s); err != nil {
-			return err
-		}
-		_, err := base64.RawURLEncoding.Strict().DecodeString(s)
-		if err != nil {
-			return wrapSemanticError("cbor: invalid base64url", err)
-		}
-		return d.setAny(start, "base64url string", Base64URLString(s), v)
-
-	// tag number 34: base64
-	case tagNumberBase64:
-		var s string
-		if err := d.decode(&s); err != nil {
-			return err
-		}
-		_, err := base64.StdEncoding.Strict().DecodeString(s)
-		if err != nil {
-			return wrapSemanticError("cbor: invalid base64url", err)
-		}
-		return d.setAny(start, "base64 string", Base64String(s), v)
-
-	// tag number 55799 Self-Described CBOR
-	case tagNumberSelfDescribe:
-		// RFC 8949 Section 3.4.6.
-		// It does not impart any special semantics on the data item that it encloses.
-		return d.decodeReflectValue(v)
-	}
-
 	var content any
 	if err := d.decode(&content); err != nil {
 		return err
 	}
-	switch v.Kind() {
-	case reflect.Interface:
-		if v.NumMethod() != 0 {
-			d.saveError(&UnmarshalTypeError{Value: "tag", Type: v.Type(), Offset: int64(start)})
-			break
+	tag := Tag{Number: n, Content: content}
+	if d.decodingKeys || v.Type() == tagType {
+		d.setAny(start, "tag", reflect.ValueOf(tag), v)
+	} else {
+		decoded, err := tag.Decode()
+		if err != nil {
+			return err
 		}
-		v.Set(reflect.ValueOf(Tag{Number: n, Content: content}))
-	default:
-		d.saveError(&UnmarshalTypeError{Value: "tag", Type: v.Type(), Offset: int64(start)})
+		d.setAny(start, "tag", reflect.ValueOf(decoded), v)
 	}
 	return nil
-}
-
-func (d *decodeState) decodeDatetimeString(start int, v reflect.Value) error {
-	var s string
-	if err := d.decode(&s); err != nil {
-		return err
-	}
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		return wrapSemanticError("cbor: invalid datetime string", err)
-	}
-	if t.Unix() < 0 {
-		return newSemanticError("cbor: invalid range of datetime")
-	}
-	return d.setAny(start, "time", t, v)
-}
-
-func (d *decodeState) decodeEpochDatetime(start int, v reflect.Value) error {
-	var epoch any
-	if err := d.decode(&epoch); err != nil {
-		return err
-	}
-
-	var t time.Time
-	switch epoch := epoch.(type) {
-	case int64:
-		if epoch < 0 || epoch >= year10000 {
-			return newSemanticError("cbor: invalid range of datetime")
-		}
-		t = time.Unix(epoch, 0)
-	case Integer:
-		i, err := epoch.Int64()
-		if err != nil || i < 0 || i >= year10000 {
-			return wrapSemanticError("cbor: invalid range of datetime", err)
-		}
-		t = time.Unix(i, 0)
-	case float64:
-		if epoch < 0 || epoch >= year10000 {
-			return newSemanticError("cbor: invalid range of datetime")
-		}
-		i, f := math.Modf(epoch)
-		t = time.Unix(int64(i), int64(f*1e9))
-	default:
-		d.saveError(&UnmarshalTypeError{"number", reflect.TypeOf(epoch), int64(start), "", ""})
-		return nil
-	}
-	return d.setAny(start, "time", t, v)
-}
-
-func (d *decodeState) decodePositiveBignum(start int, v reflect.Value) error {
-	var b []byte
-	if err := d.decode(&b); err != nil {
-		return err
-	}
-	switch v.Type() {
-	case bigIntType:
-		i := v.Addr().Interface().(*big.Int)
-		i.SetBytes(b)
-	}
-	return nil
-}
-
-func (d *decodeState) decodeNegativeBignum(start int, v reflect.Value) error {
-	var b []byte
-	if err := d.decode(&b); err != nil {
-		return err
-	}
-	switch v.Type() {
-	case bigIntType:
-		i := v.Addr().Interface().(*big.Int)
-		i.SetBytes(b)
-		i.Sub(minusOne, i)
-	}
-	return nil
-}
-
-func (d *decodeState) decodeDecimalFraction(start int, v reflect.Value) error {
-	return errors.New("TODO: implement")
 }
 
 func (d *decodeState) decodeBigFloat(start int, v reflect.Value) error {

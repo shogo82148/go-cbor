@@ -1,6 +1,7 @@
 package cbor
 
 import (
+	"encoding/base64"
 	"errors"
 	"math"
 	"math/big"
@@ -216,4 +217,137 @@ const (
 type Tag struct {
 	Number  TagNumber
 	Content any
+}
+
+func (tag Tag) Decode() (any, error) {
+	switch tag.Number {
+	// tag number 0: date/time string
+	case tagNumberDatetimeString:
+		s, ok := tag.Content.(string)
+		if !ok {
+			return nil, newSemanticError("cbor: invalid datetime string")
+		}
+		t, err := time.Parse(time.RFC3339Nano, s)
+		if err != nil {
+			return nil, wrapSemanticError("cbor: invalid datetime string", err)
+		}
+		if t.Unix() < 0 || t.Unix() >= year10000 {
+			return nil, newSemanticError("cbor: invalid range of datetime")
+		}
+		return t, nil
+
+	// tag number 1: epoch-based date/time
+	case tagNumberEpochDatetime:
+		var t time.Time
+		switch epoch := tag.Content.(type) {
+		case int64:
+			if epoch < 0 || epoch >= year10000 {
+				return nil, newSemanticError("cbor: invalid range of datetime")
+			}
+			t = time.Unix(epoch, 0)
+		case Integer:
+			i, err := epoch.Int64()
+			if err != nil || i < 0 || i >= year10000 {
+				return nil, wrapSemanticError("cbor: invalid range of datetime", err)
+			}
+			t = time.Unix(i, 0)
+		case float64:
+			if epoch < 0 || epoch >= year10000 {
+				return nil, newSemanticError("cbor: invalid range of datetime")
+			}
+			i, f := math.Modf(epoch)
+			t = time.Unix(int64(i), int64(f*1e9))
+		default:
+			return nil, newSemanticError("cbor: invalid epoch-based datetime")
+		}
+		return t, nil
+
+	// tag number 2: positive bignum
+	case tagNumberPositiveBignum:
+		b, ok := tag.Content.([]byte)
+		if !ok {
+			return nil, newSemanticError("cbor: invalid positive bignum")
+		}
+		return new(big.Int).SetBytes(b), nil
+
+	// tag number 3: negative bignum
+	case tagNumberNegativeBignum:
+		b, ok := tag.Content.([]byte)
+		if !ok {
+			return nil, newSemanticError("cbor: invalid positive bignum")
+		}
+		i := new(big.Int).SetBytes(b)
+		return i.Sub(minusOne, i), nil
+
+	// tag number 4: decimal fraction
+	case tagNumberDecimalFraction:
+		// TODO: implement
+
+	// tag number 5: bigfloat
+	case tagNumberBigfloat:
+		// TODO: implement
+
+	// tag number 21: expected conversion to base64url
+	case tagNumberExpectedBase64URL:
+		// return d.decodeExpectedBase64URL(start, v)
+
+	// tag number 22: expected conversion to base64
+	case tagNumberExpectedBase64:
+		// return d.decodeExpectedBase64(start, v)
+
+	// tag number 23: expected conversion to base16
+	case tagNumberExpectedBase16:
+		// return d.decodeExpectedBase16(start, v)
+
+	// tag number 24: encoded CBOR data item
+	case tagNumberEncodedData:
+		// var data []byte
+		// if err := d.decode(&data); err != nil {
+		// 	return err
+		// }
+		// return d.setAny(start, "encoded data", EncodedData(data), v)
+
+	// tag number 32: URI
+	case tagNumberURI:
+		s, ok := tag.Content.(string)
+		if !ok {
+			return nil, newSemanticError("cbor: invalid URI")
+		}
+		u, err := url.Parse(s)
+		if err != nil {
+			return nil, wrapSemanticError("cbor: invalid URI", err)
+		}
+		return u, nil
+
+	// tag number 33: base64url
+	case tagNumberBase64URL:
+		s, ok := tag.Content.(string)
+		if !ok {
+			return nil, newSemanticError("cbor: invalid base64url")
+		}
+		_, err := base64.RawURLEncoding.Strict().DecodeString(s)
+		if err != nil {
+			return nil, wrapSemanticError("cbor: invalid base64url", err)
+		}
+		return Base64URLString(s), nil
+
+	// tag number 34: base64
+	case tagNumberBase64:
+		s, ok := tag.Content.(string)
+		if !ok {
+			return nil, newSemanticError("cbor: invalid base64")
+		}
+		_, err := base64.StdEncoding.Strict().DecodeString(s)
+		if err != nil {
+			return nil, wrapSemanticError("cbor: invalid base64", err)
+		}
+		return Base64String(s), nil
+
+	// tag number 55799 Self-Described CBOR
+	case tagNumberSelfDescribe:
+		// RFC 8949 Section 3.4.6.
+		// It does not impart any special semantics on the data item that it encloses.
+		return tag.Content, nil
+	}
+	return tag, nil
 }
