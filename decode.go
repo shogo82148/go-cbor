@@ -1630,7 +1630,7 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 	if d.decodingKeys || v.Type() == tagType {
 		d.setAny(start, "tag", tag, v)
 	} else {
-		decoded, err := tag.Decode()
+		decoded, err := tag.decode()
 		if err != nil {
 			return err
 		}
