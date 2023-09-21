@@ -256,7 +256,7 @@ func (tag Tag) Decode() (any, error) {
 				return nil, newSemanticError("cbor: invalid range of datetime")
 			}
 			i, f := math.Modf(epoch)
-			t = time.Unix(int64(i), int64(f*1e9))
+			t = time.Unix(int64(i), int64(math.RoundToEven(f*1e9)))
 		default:
 			return nil, newSemanticError("cbor: invalid epoch-based datetime")
 		}
