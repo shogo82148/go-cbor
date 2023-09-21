@@ -1037,6 +1037,23 @@ func (d *decodeState) decodeArray(start int, n uint64, u Unmarshaler, v reflect.
 			}
 		}
 
+	case reflect.Array:
+		l := v.Len()
+		var i int
+		for i = 0; i < int(n) && i < l; i++ {
+			if err := d.decodeReflectValue(v.Index(i)); err != nil {
+				return err
+			}
+		}
+		for j := i; j < int(n); j++ {
+			if err := d.checkWellFormedChild(); err != nil {
+				return err
+			}
+		}
+		for j := i; j < l; j++ {
+			v.Index(j).Set(reflect.Zero(v.Type().Elem()))
+		}
+
 	case reflect.Interface:
 		if v.NumMethod() != 0 {
 			d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(start)})
@@ -1135,6 +1152,33 @@ func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.
 		v.SetLen(i)
 		if i == 0 {
 			v.Set(reflect.MakeSlice(v.Type(), 0, 0))
+		}
+
+	case reflect.Array:
+		l := v.Len()
+		i := 0
+		for {
+			typ, err := d.peekByte()
+			if err != nil {
+				return err
+			}
+			if typ == 0xff {
+				d.off++
+				break
+			}
+			if i < l {
+				if err := d.decodeReflectValue(v.Index(i)); err != nil {
+					return err
+				}
+			} else {
+				if err := d.checkWellFormedChild(); err != nil {
+					return err
+				}
+			}
+			i++
+		}
+		for j := i; j < l; j++ {
+			v.Index(j).Set(reflect.Zero(v.Type().Elem()))
 		}
 
 	case reflect.Interface:

@@ -859,6 +859,42 @@ var unmarshalTests = []struct {
 		new(any),
 		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
 	},
+	{
+		"decode into Go array",
+		[]byte{0x83, 0x01, 0x02, 0x03},
+		new([3]int64),
+		ptr([3]int64{1, 2, 3}),
+	},
+	{
+		"decode into Go array: shorter than expected",
+		[]byte{0x83, 0x01, 0x02, 0x03},
+		ptr([5]int64{1, 2, 3, 4, 5}),
+		ptr([5]int64{1, 2, 3, 0, 0}),
+	},
+	{
+		"decode into Go array: longer than expected",
+		[]byte{0x83, 0x01, 0x02, 0x03},
+		new([2]int64),
+		ptr([2]int64{1, 2}),
+	},
+	{
+		"decode indefinite-length array into Go array",
+		[]byte{0x9f, 0x01, 0x02, 0x03, 0xff},
+		new([3]int64),
+		ptr([3]int64{1, 2, 3}),
+	},
+	{
+		"decode indefinite-length array into Go array: shorter than expected",
+		[]byte{0x9f, 0x01, 0x02, 0x03, 0xff},
+		ptr([5]int64{1, 2, 3, 4, 5}),
+		ptr([5]int64{1, 2, 3, 0, 0}),
+	},
+	{
+		"decode indefinite-length array into Go array: longer than expected",
+		[]byte{0x9f, 0x01, 0x02, 0x03, 0xff},
+		new([2]int64),
+		ptr([2]int64{1, 2}),
+	},
 
 	{
 		"uint8_t length map",
