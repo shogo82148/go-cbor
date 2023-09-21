@@ -1207,7 +1207,9 @@ func (d *decodeState) decodeArrayIndefinite(start int, u Unmarshaler, v reflect.
 			// slices cannot be used as map keys; fall back to array.
 			rv := reflect.New(reflect.ArrayOf(len(s), anyType)).Elem()
 			for i, e := range s {
-				rv.Index(i).Set(reflect.ValueOf(e))
+				if e != nil {
+					rv.Index(i).Set(reflect.ValueOf(e))
+				}
 			}
 			v.Set(rv)
 		} else {
