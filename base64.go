@@ -80,9 +80,10 @@ var _ json.Marshaler = ExpectedBase64URL{}
 var _ json.Marshaler = ExpectedBase64{}
 var _ json.Marshaler = ExpectedBase16{}
 
-// ExpectedBase64URL is data expected to be encoded as base64-url-encoding.
-// CBOR tags that has tag number 24 is converted to this type.
-// When encoded to JSON, []byte in Content is converted to a base64-url-encoded string.
+// ExpectedBase64URL is data expected to be encoded as base64url-encoding.
+// CBOR tags that has tag number 21 is converted to this type.
+// When encoded to JSON, []byte in Content is converted to a base64url-encoded string.
+// See RFC 8949 Section 3.4.5.2.
 type ExpectedBase64URL struct {
 	Content any
 }
