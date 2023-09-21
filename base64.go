@@ -80,7 +80,9 @@ var _ json.Marshaler = ExpectedBase64URL{}
 var _ json.Marshaler = ExpectedBase64{}
 var _ json.Marshaler = ExpectedBase16{}
 
-// ExpectedBase64URL is data expected to be encoded as base64url with no padding.
+// ExpectedBase64URL is data expected to be encoded as base64-url-encoding.
+// CBOR tags that has tag number 24 is converted to this type.
+// When encoded to JSON, []byte in Content is converted to a base64-url-encoded string.
 type ExpectedBase64URL struct {
 	Content any
 }
@@ -91,7 +93,10 @@ func (e ExpectedBase64URL) MarshalJSON() ([]byte, error) {
 	return json.Marshal(data)
 }
 
-// ExpectedBase64 is data expected to be encoded as base64 with padding.
+// ExpectedBase64 is data expected to be encoded as base64-encoding.
+// CBOR tags that has tag number 22 is converted to this type.
+// When encoded to JSON, []byte in Content is converted to a base64-encoded string.
+// See RFC 8949 Section 3.4.5.2.
 type ExpectedBase64 struct {
 	Content any
 }
@@ -102,7 +107,10 @@ func (e ExpectedBase64) MarshalJSON() ([]byte, error) {
 	return json.Marshal(data)
 }
 
-// ExpectedBase16 is data expected to be encoded as base16.
+// ExpectedBase16 is data expected to be encoded as base16-encoding (as known as hex-encoding).
+// CBOR tags that has tag number 23 is converted to this type.
+// When encoded to JSON, []byte in Content is converted to a base16-encoded string.
+// See RFC 8949 Section 3.4.5.2.
 type ExpectedBase16 struct {
 	Content any
 }
