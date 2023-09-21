@@ -13,8 +13,11 @@ import (
 	"time"
 )
 
-// epoch time for 10000-01-01T00:00:00Z
-const year10000 = 253402300800
+// maximum epoch time we accept (10000-01-01T00:00:00Z) excluded
+const maxEpoch = 253402300800
+
+// minimum epoch time we accept (0000-01-01T00:00:00Z) excluded
+const minEpoch = -62135596800
 
 var anySliceType = reflect.TypeOf([]any(nil))
 var anyType = reflect.TypeOf((*any)(nil)).Elem()
@@ -231,7 +234,7 @@ func (tag Tag) Decode() (any, error) {
 		if err != nil {
 			return nil, wrapSemanticError("cbor: invalid datetime string", err)
 		}
-		if t.Unix() < 0 || t.Unix() >= year10000 {
+		if t.Unix() < minEpoch || t.Unix() >= maxEpoch {
 			return nil, newSemanticError("cbor: invalid range of datetime")
 		}
 		return t, nil
@@ -241,18 +244,21 @@ func (tag Tag) Decode() (any, error) {
 		var t time.Time
 		switch epoch := tag.Content.(type) {
 		case int64:
-			if epoch < 0 || epoch >= year10000 {
+			if epoch < minEpoch || epoch >= maxEpoch {
 				return nil, newSemanticError("cbor: invalid range of datetime")
 			}
 			t = time.Unix(epoch, 0)
 		case Integer:
 			i, err := epoch.Int64()
-			if err != nil || i < 0 || i >= year10000 {
+			if err != nil || i < minEpoch || i >= maxEpoch {
 				return nil, wrapSemanticError("cbor: invalid range of datetime", err)
 			}
 			t = time.Unix(i, 0)
 		case float64:
-			if epoch < 0 || epoch >= year10000 {
+			if math.IsNaN(epoch) {
+				return Undefined, nil
+			}
+			if epoch < minEpoch || epoch >= maxEpoch {
 				return nil, newSemanticError("cbor: invalid range of datetime")
 			}
 			i, f := math.Modf(epoch)
@@ -268,7 +274,11 @@ func (tag Tag) Decode() (any, error) {
 		if !ok {
 			return nil, newSemanticError("cbor: invalid positive bignum")
 		}
-		return new(big.Int).SetBytes(b), nil
+		i := new(big.Int).SetBytes(b)
+		if i.IsInt64() {
+			return i.Int64(), nil
+		}
+		return i, nil
 
 	// tag number 3: negative bignum
 	case tagNumberNegativeBignum:
@@ -277,7 +287,11 @@ func (tag Tag) Decode() (any, error) {
 			return nil, newSemanticError("cbor: invalid positive bignum")
 		}
 		i := new(big.Int).SetBytes(b)
-		return i.Sub(minusOne, i), nil
+		i.Sub(minusOne, i)
+		if i.IsInt64() {
+			return i.Int64(), nil
+		}
+		return i, nil
 
 	// tag number 4: decimal fraction
 	case tagNumberDecimalFraction:
