@@ -256,7 +256,7 @@ func (tag Tag) Decode() (any, error) {
 			t = time.Unix(i, 0)
 		case float64:
 			if math.IsNaN(epoch) {
-				return time.Time{}, nil
+				return Undefined, nil
 			}
 			if epoch < minEpoch || epoch >= maxEpoch {
 				return nil, newSemanticError("cbor: invalid range of datetime")
