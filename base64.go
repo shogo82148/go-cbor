@@ -123,7 +123,13 @@ func (e ExpectedBase16) MarshalJSON() ([]byte, error) {
 }
 
 // Base64String is a base64 with padding encoded data.
+// CBOR tags that has tag number 34 is converted to this type.
+// The decoder and the encoder validate that it is a valid base64-encoded string.
+// See RFC 8949 Section 3.4.5.3.
 type Base64String string
 
 // Base64URLString is a base64url with no padding encoded string.
+// CBOR tags that has tag number 33 is converted to this type.
+// The decoder and the encoder validate that it is a valid base64url-encoded string.
+// See RFC 8949 Section 3.4.5.3.
 type Base64URLString string
