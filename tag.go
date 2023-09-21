@@ -1,7 +1,7 @@
 package cbor
 
 import (
-	"encoding/base64"
+	"errors"
 	"math"
 	"math/big"
 	"net/url"
@@ -38,6 +38,20 @@ type Tag struct {
 }
 
 func (tag Tag) Decode(v any) error {
+	data, err := Marshal(tag.Content)
+	if err != nil {
+		return err
+	}
+	t := RawTag{Number: tag.Number, Content: data}
+	return t.Decode(v)
+}
+
+type RawTag struct {
+	Number  TagNumber
+	Content RawMessage
+}
+
+func (tag RawTag) Decode(v any) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return &InvalidUnmarshalError{reflect.TypeOf(v)}
@@ -45,123 +59,138 @@ func (tag Tag) Decode(v any) error {
 	return tag.decodeReflectValue(rv.Elem())
 }
 
-func (tag Tag) decodeReflectValue(rv reflect.Value) error {
-	switch tag.Number {
-	default:
-		// TODO: do not use decode.
-		decoded, err := tag.decode()
-		if err != nil {
-			return err
-		}
-		rv.Set(reflect.ValueOf(decoded))
+func (tag RawTag) decodeReflectValue(v reflect.Value) error {
+	isNull := tag.Content[0] == 0xf6 || tag.Content[0] == 0xf7 // null or undefined
+	u, v := indirect(v, isNull)
+	if u != nil {
+		return u.UnmarshalCBOR([]byte(tag.Content))
 	}
-	return nil
-}
 
-func (tag Tag) decode() (any, error) {
 	switch tag.Number {
+
 	// tag number 0: date/time string
 	case tagNumberDatetimeString:
-		s, ok := tag.Content.(string)
-		if !ok {
-			return nil, newSemanticError("cbor: invalid datetime string")
+		var s string
+		if err := Unmarshal([]byte(tag.Content), &s); err != nil {
+			return wrapSemanticError("cbor: invalid datetime string", err)
 		}
 		t, err := time.Parse(time.RFC3339Nano, s)
 		if err != nil {
-			return nil, wrapSemanticError("cbor: invalid datetime string", err)
+			return wrapSemanticError("cbor: invalid datetime string", err)
 		}
 		if t.Unix() < minEpoch || t.Unix() >= maxEpoch {
-			return nil, newSemanticError("cbor: invalid range of datetime")
+			return newSemanticError("cbor: invalid range of datetime")
 		}
-		return t, nil
+		if v.Type() == timeType {
+			v.Set(reflect.ValueOf(t))
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 1: epoch-based date/time
 	case tagNumberEpochDatetime:
+		var a any
+		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
+			return wrapSemanticError("cbor: invalid epoch-based datetime", err)
+		}
+
 		var t time.Time
-		switch epoch := tag.Content.(type) {
+		switch epoch := a.(type) {
 		case int64:
 			if epoch < minEpoch || epoch >= maxEpoch {
-				return nil, newSemanticError("cbor: invalid range of datetime")
+				return newSemanticError("cbor: invalid range of datetime")
 			}
 			t = time.Unix(epoch, 0)
 		case Integer:
 			i, err := epoch.Int64()
 			if err != nil || i < minEpoch || i >= maxEpoch {
-				return nil, wrapSemanticError("cbor: invalid range of datetime", err)
+				return wrapSemanticError("cbor: invalid range of datetime", err)
 			}
 			t = time.Unix(i, 0)
 		case float64:
-			if math.IsNaN(epoch) {
-				return Undefined, nil
-			}
 			if epoch < minEpoch || epoch >= maxEpoch {
-				return nil, newSemanticError("cbor: invalid range of datetime")
+				return newSemanticError("cbor: invalid range of datetime")
 			}
 			i, f := math.Modf(epoch)
 			t = time.Unix(int64(i), int64(math.RoundToEven(f*1e9)))
 		default:
-			return nil, newSemanticError("cbor: invalid epoch-based datetime")
+			newSemanticError("cbor: invalid epoch-based datetime")
 		}
-		return t, nil
+		if v.Type() == timeType {
+			v.Set(reflect.ValueOf(t))
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 2: positive bignum
 	case tagNumberPositiveBignum:
-		b, ok := tag.Content.([]byte)
-		if !ok {
-			return nil, newSemanticError("cbor: invalid positive bignum")
+		var b []byte
+		if err := Unmarshal([]byte(tag.Content), &b); err != nil {
+			return wrapSemanticError("cbor: invalid positive bignum", err)
 		}
+		if v.Type() == bigIntType {
+			i := v.Addr().Interface().(*big.Int)
+			i.SetBytes(b)
+			return nil
+		}
+
 		i := new(big.Int).SetBytes(b)
-		if i.IsInt64() {
-			return i.Int64(), nil
+		switch v.Kind() {
+		// TODO:
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if !i.IsInt64() {
+				return newSemanticError("cbor: integer overflow")
+			}
+		default:
+			return &UnmarshalTypeError{Value: "integer", Type: v.Type()}
 		}
-		return i, nil
 
 	// tag number 3: negative bignum
 	case tagNumberNegativeBignum:
-		b, ok := tag.Content.([]byte)
-		if !ok {
-			return nil, newSemanticError("cbor: invalid positive bignum")
+		var b []byte
+		if err := Unmarshal([]byte(tag.Content), &b); err != nil {
+			return wrapSemanticError("cbor: invalid positive bignum", err)
+		}
+		if v.Type() == bigIntType {
+			i := v.Addr().Interface().(*big.Int)
+			i.SetBytes(b)
+			i.Sub(minusOne, i)
+			return nil
 		}
 		i := new(big.Int).SetBytes(b)
 		i.Sub(minusOne, i)
-		if i.IsInt64() {
-			return i.Int64(), nil
+
+		switch v.Kind() {
+		// TODO:
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if !i.IsInt64() {
+				return newSemanticError("cbor: integer overflow")
+			}
+		default:
+			return &UnmarshalTypeError{Value: "integer", Type: v.Type()}
 		}
-		return i, nil
 
 	// tag number 4: decimal fraction
 	case tagNumberDecimalFraction:
 		// TODO: implement
+		return errors.New("TODO: implement")
 
 	// tag number 5: bigfloat
 	case tagNumberBigfloat:
-		a, ok := tag.Content.([]any)
-		if !ok {
-			b, ok := tag.Content.([2]any)
-			if !ok {
-				return nil, newSemanticError("cbor: invalid bigfloat")
-			}
-			a = b[:]
+		var a struct {
+			_    struct{} `cbor:",toarray"`
+			Exp  Integer
+			Mant any
 		}
-		if len(a) != 2 {
-			return nil, newSemanticError("cbor: invalid bigfloat")
+		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
+			return wrapSemanticError("cbor: invalid bigfloat", err)
 		}
-		var exp int64
-		switch x := a[0].(type) {
-		case int64:
-			exp = x
-		case Integer:
-			var err error
-			exp, err = x.Int64()
-			if err != nil {
-				return nil, newSemanticError("cbor: invalid bigfloat")
-			}
-		default:
-			return nil, newSemanticError("cbor: invalid bigfloat")
+
+		exp, err := a.Exp.Int64()
+		if err != nil {
+			return wrapSemanticError("cbor: invalid bigfloat", err)
 		}
 
 		var mant *big.Int
-		switch x := a[1].(type) {
+		switch x := a.Mant.(type) {
 		case int64:
 			mant = big.NewInt(x)
 		case Integer:
@@ -169,80 +198,116 @@ func (tag Tag) decode() (any, error) {
 		case *big.Int:
 			mant = x
 		default:
-			return nil, newSemanticError("cbor: invalid bigfloat")
+			return &UnmarshalTypeError{Value: "float", Type: v.Type()}
 		}
 
 		f := new(big.Float)
 		f.SetInt(mant)
 		f.SetMantExp(f, int(exp))
-		return f, nil
+
+		if v.Type() == bigFloatType {
+			f0 := v.Addr().Interface().(*big.Float)
+			f0.Set(f)
+			return nil
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 21: expected conversion to base64url
 	case tagNumberExpectedBase64URL:
-		return ExpectedBase64URL{Content: tag.Content}, nil
+		var a any
+		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
+			return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
+		}
+		if v.Type() == expectedBase64URLType {
+			v.Set(reflect.ValueOf(ExpectedBase64URL{Content: a}))
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 22: expected conversion to base64
 	case tagNumberExpectedBase64:
-		return ExpectedBase64{Content: tag.Content}, nil
+		var a any
+		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
+			return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
+		}
+		if v.Type() == expectedBase64Type {
+			v.Set(reflect.ValueOf(ExpectedBase64{Content: a}))
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 23: expected conversion to base16
 	case tagNumberExpectedBase16:
-		return ExpectedBase16{Content: tag.Content}, nil
+		var a any
+		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
+			return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
+		}
+		if v.Type() == expectedBase16Type {
+			v.Set(reflect.ValueOf(ExpectedBase16{Content: a}))
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 24: encoded CBOR data item
 	case tagNumberEncodedData:
-		b, ok := tag.Content.([]byte)
-		if !ok {
-			return nil, newSemanticError("cbor: invalid encoded data")
+		var b []byte
+		if err := Unmarshal([]byte(tag.Content), &b); err != nil {
+			return wrapSemanticError("cbor: invalid encoded data", err)
 		}
-		return EncodedData(b), nil
+		if v.Type() == encodedDataType {
+			v.Set(reflect.ValueOf(EncodedData(b)))
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 32: URI
 	case tagNumberURI:
-		s, ok := tag.Content.(string)
-		if !ok {
-			return nil, newSemanticError("cbor: invalid URI")
+		var s string
+		if err := Unmarshal([]byte(tag.Content), &s); err != nil {
+			return wrapSemanticError("cbor: invalid URI", err)
 		}
 		u, err := url.Parse(s)
 		if err != nil {
-			return nil, wrapSemanticError("cbor: invalid URI", err)
+			return wrapSemanticError("cbor: invalid URI", err)
 		}
-		return u, nil
+		if v.Type() == urlType {
+			v.Set(reflect.ValueOf(*u))
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 33: base64url
 	case tagNumberBase64URL:
-		s, ok := tag.Content.(string)
-		if !ok {
-			return nil, newSemanticError("cbor: invalid base64url")
+		var s string
+		if err := Unmarshal([]byte(tag.Content), &s); err != nil {
+			return wrapSemanticError("cbor: invalid base64url", err)
 		}
-		_, err := base64.RawURLEncoding.Strict().DecodeString(s)
+		_, err := b64url.DecodeString(s)
 		if err != nil {
-			return nil, wrapSemanticError("cbor: invalid base64url", err)
+			return wrapSemanticError("cbor: invalid base64url", err)
 		}
-		return Base64URLString(s), nil
+		if v.Type() == base64URLStringType {
+			v.SetString(s)
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 34: base64
 	case tagNumberBase64:
-		s, ok := tag.Content.(string)
-		if !ok {
-			return nil, newSemanticError("cbor: invalid base64")
+		var s string
+		if err := Unmarshal([]byte(tag.Content), &s); err != nil {
+			return wrapSemanticError("cbor: invalid base64url", err)
 		}
-		_, err := base64.StdEncoding.Strict().DecodeString(s)
+		_, err := b64.DecodeString(s)
 		if err != nil {
-			return nil, wrapSemanticError("cbor: invalid base64", err)
+			return wrapSemanticError("cbor: invalid base64url", err)
 		}
-		return Base64String(s), nil
+		if v.Type() == base64URLStringType {
+			v.SetString(s)
+		}
+		return errors.New("TODO: implement")
 
 	// tag number 55799 Self-Described CBOR
 	case tagNumberSelfDescribe:
-		// RFC 8949 Section 3.4.6.
-		// It does not impart any special semantics on the data item that it encloses.
-		return tag.Content, nil
+		var a any
+		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
+			return wrapSemanticError("cbor: invalid self-described cbor", err)
+		}
 	}
-	return tag, nil
-}
 
-type RawTag struct {
-	Number  TagNumber
-	Content RawMessage
+	return nil
 }

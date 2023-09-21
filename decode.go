@@ -1636,25 +1636,20 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 		v.FieldByName("Number").SetUint(uint64(n))
 		return d.decodeReflectValue(v.FieldByName("Content"))
 	case rawTagType:
+		contentStart := d.off
 		if err := d.checkWellFormedChild(); err != nil {
 			return err
 		}
 		v.FieldByName("Number").SetUint(uint64(n))
-		v.FieldByName("Content").SetBytes(d.data[start:d.off])
+		v.FieldByName("Content").SetBytes(d.data[contentStart:d.off])
 	}
 
-	var content any
-	if err := d.decode(&content); err != nil {
+	contentStart := d.off
+	if err := d.checkWellFormedChild(); err != nil {
 		return err
 	}
-	tag := Tag{Number: n, Content: content}
-
-	decoded, err := tag.decode()
-	if err != nil {
-		return err
-	}
-	d.setAny(start, "tag", decoded, v)
-	return nil
+	tag := RawTag{Number: n, Content: d.data[contentStart:d.off]}
+	return tag.decodeReflectValue(v)
 }
 
 func (d *decodeState) setSimple(start int, s Simple, v reflect.Value) error {

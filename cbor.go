@@ -33,7 +33,7 @@ var urlType = reflect.TypeOf(url.URL{})
 
 var base64StringType = reflect.TypeOf(Base64String(""))
 var base64URLStringType = reflect.TypeOf(Base64URLString(""))
-var encodedData = reflect.TypeOf(EncodedData(nil))
+var encodedDataType = reflect.TypeOf(EncodedData(nil))
 var expectedBase16Type = reflect.TypeOf(ExpectedBase16{})
 var expectedBase64Type = reflect.TypeOf(ExpectedBase64{})
 var expectedBase64URLType = reflect.TypeOf(ExpectedBase64URL{})

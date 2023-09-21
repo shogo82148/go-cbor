@@ -212,7 +212,7 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return newBase64Encoder(tagNumberBase64, base64.StdEncoding.Strict())
 	case base64URLStringType:
 		return newBase64Encoder(tagNumberBase64URL, base64.RawURLEncoding.Strict())
-	case encodedData:
+	case encodedDataType:
 		return encodedDataEncoder
 	case expectedBase16Type:
 		return newExpectedEncoder(tagNumberExpectedBase16, t)
