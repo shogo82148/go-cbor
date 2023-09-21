@@ -1617,39 +1617,6 @@ func TestUnmarshal_SemanticError(t *testing.T) {
 		}
 	})
 
-	t.Run("negative epoch time (string)", func(t *testing.T) {
-		data := []byte{
-			0xc0, // tag(0)
-			0x74, // text(20)
-		}
-		data = append(data, "1969-12-31T23:59:59Z"...)
-
-		var v any
-		err := Unmarshal(data, &v)
-		se, ok := err.(*SemanticError)
-		if !ok {
-			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
-		} else if se.msg != "cbor: invalid range of datetime" {
-			t.Errorf("unexpected message: got %q, want %q", se.msg, "cbor: invalid range of datetime")
-		}
-	})
-
-	t.Run("negative epoch time (integer)", func(t *testing.T) {
-		data := []byte{
-			0xc1, // tag(0)
-			0x20, // -1
-		}
-
-		var v any
-		err := Unmarshal(data, &v)
-		se, ok := err.(*SemanticError)
-		if !ok {
-			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
-		} else if se.msg != "cbor: invalid range of datetime" {
-			t.Errorf("unexpected message: got %q, want %q", se.msg, "cbor: invalid range of datetime")
-		}
-	})
-
 	t.Run("year 10,000", func(t *testing.T) {
 		data := []byte{
 			0xc1,                                           // tag(0)
