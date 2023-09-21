@@ -241,3 +241,8 @@ func (tag Tag) decode() (any, error) {
 	}
 	return tag, nil
 }
+
+type RawTag struct {
+	Number  TagNumber
+	Content RawMessage
+}

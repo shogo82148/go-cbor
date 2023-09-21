@@ -1631,9 +1631,16 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 		return d.setAny(start, "tag", tag, v)
 	}
 
-	if v.Type() == tagType {
+	switch v.Type() {
+	case tagType:
 		v.FieldByName("Number").SetUint(uint64(n))
 		return d.decodeReflectValue(v.FieldByName("Content"))
+	case rawTagType:
+		if err := d.checkWellFormedChild(); err != nil {
+			return err
+		}
+		v.FieldByName("Number").SetUint(uint64(n))
+		v.FieldByName("Content").SetBytes(d.data[start:d.off])
 	}
 
 	var content any
