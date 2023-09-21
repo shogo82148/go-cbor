@@ -345,6 +345,15 @@ var unmarshalTests = []struct {
 		},
 	},
 	{
+		"tag 1 integer to Integer",
+		[]byte{0xc1, 0x1a, 0x51, 0x4b, 0x67, 0xb0},
+		&Tag{Content: &Integer{}},
+		&Tag{
+			Number:  1,
+			Content: &Integer{Value: 1363896240},
+		},
+	},
+	{
 		"tag 1 float",
 		[]byte{0xc1, 0xfb, 0x41, 0xd4, 0x52, 0xd9, 0xec, 0x20, 0x00, 0x00},
 		new(Tag),

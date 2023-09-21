@@ -1622,20 +1622,31 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
 
+	if d.decodingKeys {
+		var content any
+		if err := d.decode(&content); err != nil {
+			return err
+		}
+		tag := Tag{Number: n, Content: content}
+		return d.setAny(start, "tag", tag, v)
+	}
+
+	if v.Type() == tagType {
+		v.FieldByName("Number").SetUint(uint64(n))
+		return d.decodeReflectValue(v.FieldByName("Content"))
+	}
+
 	var content any
 	if err := d.decode(&content); err != nil {
 		return err
 	}
 	tag := Tag{Number: n, Content: content}
-	if d.decodingKeys || v.Type() == tagType {
-		d.setAny(start, "tag", tag, v)
-	} else {
-		decoded, err := tag.decode()
-		if err != nil {
-			return err
-		}
-		d.setAny(start, "tag", decoded, v)
+
+	decoded, err := tag.decode()
+	if err != nil {
+		return err
 	}
+	d.setAny(start, "tag", decoded, v)
 	return nil
 }
 
