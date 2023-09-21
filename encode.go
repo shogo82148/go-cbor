@@ -239,6 +239,9 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		}
 		return sliceEncoder
 	case reflect.Array:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return arrayBytesEncoder
+		}
 		return sliceEncoder
 	case reflect.Map:
 		return mapEncoder
@@ -275,6 +278,20 @@ func stringEncoder(e *encodeState, v reflect.Value) error {
 
 func bytesEncoder(e *encodeState, v reflect.Value) error {
 	return e.encodeBytes(v.Bytes())
+}
+
+func arrayBytesEncoder(e *encodeState, v reflect.Value) error {
+	if v.CanAddr() {
+		return e.encodeBytes(v.Slice(0, v.Len()).Bytes())
+	} else {
+		l := v.Len()
+		e.writeUint(majorTypeBytes, uint64(l))
+		for i := 0; i < l; i++ {
+			elem := v.Index(i)
+			e.buf.WriteByte(byte(elem.Uint()))
+		}
+		return nil
+	}
 }
 
 func integerEncoder(e *encodeState, v reflect.Value) error {
