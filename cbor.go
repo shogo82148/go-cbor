@@ -268,7 +268,11 @@ func (tag Tag) Decode() (any, error) {
 		if !ok {
 			return nil, newSemanticError("cbor: invalid positive bignum")
 		}
-		return new(big.Int).SetBytes(b), nil
+		i := new(big.Int).SetBytes(b)
+		if i.IsInt64() {
+			return i.Int64(), nil
+		}
+		return i, nil
 
 	// tag number 3: negative bignum
 	case tagNumberNegativeBignum:
@@ -277,7 +281,11 @@ func (tag Tag) Decode() (any, error) {
 			return nil, newSemanticError("cbor: invalid positive bignum")
 		}
 		i := new(big.Int).SetBytes(b)
-		return i.Sub(minusOne, i), nil
+		i.Sub(minusOne, i)
+		if i.IsInt64() {
+			return i.Int64(), nil
+		}
+		return i, nil
 
 	// tag number 4: decimal fraction
 	case tagNumberDecimalFraction:

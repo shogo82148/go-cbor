@@ -1163,6 +1163,19 @@ func TestUnmarshal_BigInt(t *testing.T) {
 
 		testUnexpectedEnd(t, input)
 	})
+
+	t.Run("minus one", func(t *testing.T) {
+		input := []byte{0xc3, 0x40}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := any(int64(-1))
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+		testUnexpectedEnd(t, input)
+	})
 }
 
 func TestUnmarshal_BigFloat(t *testing.T) {
