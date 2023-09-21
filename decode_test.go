@@ -1118,13 +1118,17 @@ func TestUnmarshal_Time(t *testing.T) {
 	})
 
 	// https://github.com/shogo82148/go-cbor/pull/67
-	t.Run("float epoch", func(t *testing.T) {
+	t.Run("float epoch type error", func(t *testing.T) {
 		input := []byte{0xc1, 0x44, 0x30, 0x30, 0x30, 0x30}
 		var got time.Time
 		err := Unmarshal(input, &got)
-		_, ok := err.(*UnmarshalTypeError)
+		se, ok := err.(*SemanticError)
 		if !ok {
-			t.Errorf("Unmarshal() error = %v, want UnmarshalTypeError", err)
+			t.Errorf("Unmarshal() error = %v, want SemanticError", err)
+			return
+		}
+		if se.msg != "cbor: invalid epoch-based datetime" {
+			t.Errorf("unexpected error message: %q", se.msg)
 		}
 
 		testUnexpectedEnd(t, input)
