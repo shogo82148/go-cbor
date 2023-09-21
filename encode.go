@@ -345,12 +345,9 @@ func simpleEncoder(e *encodeState, v reflect.Value) error {
 
 func timeEncoder(e *encodeState, v reflect.Value) error {
 	t := v.Interface().(time.Time)
-	if t.IsZero() {
-		return e.encodeUndefined()
-	}
 	epoch := t.Unix()
 	nano := t.Nanosecond()
-	if epoch < 0 || epoch >= year10000 {
+	if epoch <= 0 || epoch >= maxEpoch {
 		return e.encodeUndefined()
 	}
 
