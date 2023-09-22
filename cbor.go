@@ -47,10 +47,14 @@ var Undefined undefined = nil
 // RawMessage is a raw encoded CBOR value. It implements Marshaler and
 // Unmarshaler and can be used to delay CBOR decoding or precompute a CBOR
 // encoding.
+// nil RawMessage encodes as the CBOR undefined value.
 type RawMessage []byte
 
 // MarshalCBOR returns m as the CBOR encoding of m.
 func (m RawMessage) MarshalCBOR() ([]byte, error) {
+	if m == nil {
+		return []byte{0xf7}, nil // undefined
+	}
 	return []byte(m), nil
 }
 
@@ -189,6 +193,8 @@ func (i *Integer) UnmarshalJSON(b []byte) error {
 }
 
 // EncodedData is a CBOR encoded data.
+// CBOR tags that has tag number 24 is converted to this type.
+// See RFC 8949 Section 3.4.5.1.
 type EncodedData []byte
 
 // Simple is a CBOR simple type.

@@ -51,6 +51,25 @@ type RawTag struct {
 	Content RawMessage
 }
 
+// Decode decodes the tag content.
+// The following tags are supported:
+//
+//   - tag number 0: date/time string is decoded as time.Time.
+//   - tag number 1: epoch-based date/time is decoded as time.Time.
+//   - tag number 2: positive bignum is decoded as *big.Int.
+//   - tag number 3: negative bignum is decoded as *big.Int.
+//   - tag number 4: decimal fraction is not implemented.
+//   - tag number 5: bigfloat is decoded as *big.Float.
+//   - tag number 21: expected conversion to base64url is decoded as ExpectedBase64URL.
+//   - tag number 22: expected conversion to base64 is decoded as ExpectedBase64.
+//   - tag number 23: expected conversion to base16 is decoded as ExpectedBase16.
+//   - tag number 24: encoded CBOR data item is decoded as EncodedData.
+//   - tag number 32: URI is decoded as *url.URL.
+//   - tag number 33: base64url is decoded as Base64URLString.
+//   - tag number 34: base64 is decoded as Base64String.
+//   - tag number 55799: Self-Described CBOR return the content as is.
+//
+// Other tags returns tag itself.
 func (tag RawTag) Decode(v any) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
