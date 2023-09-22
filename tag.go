@@ -37,20 +37,6 @@ type Tag struct {
 	Content any
 }
 
-func (tag Tag) Decode(v any) error {
-	data, err := Marshal(tag.Content)
-	if err != nil {
-		return err
-	}
-	t := RawTag{Number: tag.Number, Content: data}
-	return t.Decode(v)
-}
-
-type RawTag struct {
-	Number  TagNumber
-	Content RawMessage
-}
-
 // Decode decodes the tag content.
 // The following tags are supported:
 //
@@ -70,6 +56,21 @@ type RawTag struct {
 //   - tag number 55799: Self-Described CBOR return the content as is.
 //
 // Other tags returns tag itself.
+func (tag Tag) Decode(v any) error {
+	data, err := Marshal(tag.Content)
+	if err != nil {
+		return err
+	}
+	t := RawTag{Number: tag.Number, Content: data}
+	return t.Decode(v)
+}
+
+type RawTag struct {
+	Number  TagNumber
+	Content RawMessage
+}
+
+// Decode decodes the tag content.
 func (tag RawTag) Decode(v any) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
@@ -78,9 +79,13 @@ func (tag RawTag) Decode(v any) error {
 	return tag.decodeReflectValue(rv.Elem())
 }
 
-func (tag RawTag) decodeReflectValue(v reflect.Value) error {
-	isNull := tag.Content[0] == 0xf6 || tag.Content[0] == 0xf7 // null or undefined
-	u, v := indirect(v, isNull)
+func (tag RawTag) decodeReflectValue(rv reflect.Value) error {
+	firstByte := tag.Content[0]
+	mt := majorType(firstByte >> 5)
+	d := newDecodeState(tag.Content)
+
+	isNull := firstByte == 0xf6 || firstByte == 0xf7 // null or undefined
+	u, rv := indirect(rv, isNull)
 	if u != nil {
 		return u.UnmarshalCBOR([]byte(tag.Content))
 	}
@@ -90,7 +95,7 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 	// tag number 0: date/time string
 	case tagNumberDatetimeString:
 		var s string
-		if err := Unmarshal([]byte(tag.Content), &s); err != nil {
+		if err := d.decode(&s); err != nil {
 			return wrapSemanticError("cbor: invalid datetime string", err)
 		}
 		t, err := time.Parse(time.RFC3339Nano, s)
@@ -100,76 +105,90 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 		if t.Unix() < minEpoch || t.Unix() >= maxEpoch {
 			return newSemanticError("cbor: invalid range of datetime")
 		}
-		if v.Type() == timeType {
-			v.Set(reflect.ValueOf(t))
+
+		rt := rv.Type()
+		if rt == timeType {
+			rv.Set(reflect.ValueOf(t))
+			return nil
 		}
-		return errors.New("TODO: implement")
+		if rt.Kind() == reflect.Interface && timeType.Implements(rt) {
+			rv.Set(reflect.ValueOf(t))
+			return nil
+		}
+		return &UnmarshalTypeError{Value: "datetime", Type: rv.Type()}
 
 	// tag number 1: epoch-based date/time
 	case tagNumberEpochDatetime:
-		var a any
-		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
-			return wrapSemanticError("cbor: invalid epoch-based datetime", err)
-		}
-
 		var t time.Time
-		switch epoch := a.(type) {
-		case int64:
-			if epoch < minEpoch || epoch >= maxEpoch {
-				return newSemanticError("cbor: invalid range of datetime")
+		switch mt {
+		case majorTypePositiveInt, majorTypeNegativeInt:
+			var epoch Integer
+			if err := d.decode(&epoch); err != nil {
+				return wrapSemanticError("cbor: invalid epoch-based datetime", err)
 			}
-			t = time.Unix(epoch, 0)
-		case Integer:
 			i, err := epoch.Int64()
 			if err != nil || i < minEpoch || i >= maxEpoch {
 				return wrapSemanticError("cbor: invalid range of datetime", err)
 			}
 			t = time.Unix(i, 0)
-		case float64:
-			if epoch < minEpoch || epoch >= maxEpoch {
-				return newSemanticError("cbor: invalid range of datetime")
+		case majorTypeOther:
+			var epoch float64
+			if err := d.decode(&epoch); err != nil {
+				return wrapSemanticError("cbor: invalid epoch-based datetime", err)
 			}
-			i, f := math.Modf(epoch)
-			t = time.Unix(int64(i), int64(math.RoundToEven(f*1e9)))
+			if !math.IsNaN(epoch) {
+				if epoch < minEpoch || epoch >= maxEpoch {
+					return newSemanticError("cbor: invalid range of datetime")
+				}
+				i, f := math.Modf(epoch)
+				t = time.Unix(int64(i), int64(math.RoundToEven(f*1e9)))
+			}
 		default:
-			newSemanticError("cbor: invalid epoch-based datetime")
+			return newSemanticError("cbor: invalid epoch-based datetime")
 		}
-		if v.Type() == timeType {
-			v.Set(reflect.ValueOf(t))
+
+		rt := rv.Type()
+		if rt == timeType {
+			rv.Set(reflect.ValueOf(t))
+			return nil
 		}
-		return errors.New("TODO: implement")
+		if rt.Kind() == reflect.Interface && timeType.Implements(rt) {
+			rv.Set(reflect.ValueOf(t))
+			return nil
+		}
+		return &UnmarshalTypeError{Value: "datetime", Type: rv.Type()}
 
 	// tag number 2: positive bignum
 	case tagNumberPositiveBignum:
 		var b []byte
-		if err := Unmarshal([]byte(tag.Content), &b); err != nil {
+		if err := d.decode(&b); err != nil {
 			return wrapSemanticError("cbor: invalid positive bignum", err)
 		}
-		if v.Type() == bigIntType {
-			i := v.Addr().Interface().(*big.Int)
+		if rv.Type() == bigIntType {
+			i := rv.Addr().Interface().(*big.Int)
 			i.SetBytes(b)
 			return nil
 		}
 
 		i := new(big.Int).SetBytes(b)
-		switch v.Kind() {
+		switch rv.Kind() {
 		// TODO:
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			if !i.IsInt64() {
 				return newSemanticError("cbor: integer overflow")
 			}
 		default:
-			return &UnmarshalTypeError{Value: "integer", Type: v.Type()}
+			return &UnmarshalTypeError{Value: "integer", Type: rv.Type()}
 		}
 
 	// tag number 3: negative bignum
 	case tagNumberNegativeBignum:
 		var b []byte
-		if err := Unmarshal([]byte(tag.Content), &b); err != nil {
+		if err := d.decode(&b); err != nil {
 			return wrapSemanticError("cbor: invalid positive bignum", err)
 		}
-		if v.Type() == bigIntType {
-			i := v.Addr().Interface().(*big.Int)
+		if rv.Type() == bigIntType {
+			i := rv.Addr().Interface().(*big.Int)
 			i.SetBytes(b)
 			i.Sub(minusOne, i)
 			return nil
@@ -177,14 +196,14 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 		i := new(big.Int).SetBytes(b)
 		i.Sub(minusOne, i)
 
-		switch v.Kind() {
+		switch rv.Kind() {
 		// TODO:
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			if !i.IsInt64() {
 				return newSemanticError("cbor: integer overflow")
 			}
 		default:
-			return &UnmarshalTypeError{Value: "integer", Type: v.Type()}
+			return &UnmarshalTypeError{Value: "integer", Type: rv.Type()}
 		}
 
 	// tag number 4: decimal fraction
@@ -199,7 +218,7 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 			Exp  Integer
 			Mant any
 		}
-		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
+		if err := d.decode(&a); err != nil {
 			return wrapSemanticError("cbor: invalid bigfloat", err)
 		}
 
@@ -217,15 +236,15 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 		case *big.Int:
 			mant = x
 		default:
-			return &UnmarshalTypeError{Value: "float", Type: v.Type()}
+			return &UnmarshalTypeError{Value: "float", Type: rv.Type()}
 		}
 
 		f := new(big.Float)
 		f.SetInt(mant)
 		f.SetMantExp(f, int(exp))
 
-		if v.Type() == bigFloatType {
-			f0 := v.Addr().Interface().(*big.Float)
+		if rv.Type() == bigFloatType {
+			f0 := rv.Addr().Interface().(*big.Float)
 			f0.Set(f)
 			return nil
 		}
@@ -233,20 +252,20 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 
 	// tag number 21: expected conversion to base64url
 	case tagNumberExpectedBase64URL:
-		t := v.Type()
+		t := rv.Type()
 		switch {
 		case t == expectedBase64URLType:
-			if err := Unmarshal([]byte(tag.Content), v.FieldByName("Content").Interface()); err != nil {
+			if err := d.decodeReflectValue(rv.FieldByName("Content")); err != nil {
 				return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
 			}
-		case v.Kind() == reflect.Interface && expectedBase64URLType.Implements(t):
+		case rv.Kind() == reflect.Interface && expectedBase64URLType.Implements(t):
 			var a any
-			if err := Unmarshal([]byte(tag.Content), &a); err != nil {
+			if err := d.decode(&a); err != nil {
 				return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
 			}
-			v.Set(reflect.ValueOf(ExpectedBase64URL{Content: a}))
+			rv.Set(reflect.ValueOf(ExpectedBase64URL{Content: a}))
 		default:
-			return &UnmarshalTypeError{Value: "base64url", Type: v.Type()}
+			return &UnmarshalTypeError{Value: "base64url", Type: rv.Type()}
 		}
 		return nil
 
@@ -256,8 +275,8 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
 			return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
 		}
-		if v.Type() == expectedBase64Type {
-			v.Set(reflect.ValueOf(ExpectedBase64{Content: a}))
+		if rv.Type() == expectedBase64Type {
+			rv.Set(reflect.ValueOf(ExpectedBase64{Content: a}))
 		}
 		return errors.New("TODO: implement")
 
@@ -267,8 +286,8 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
 			return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
 		}
-		if v.Type() == expectedBase16Type {
-			v.Set(reflect.ValueOf(ExpectedBase16{Content: a}))
+		if rv.Type() == expectedBase16Type {
+			rv.Set(reflect.ValueOf(ExpectedBase16{Content: a}))
 		}
 		return errors.New("TODO: implement")
 
@@ -278,8 +297,8 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 		if err := Unmarshal([]byte(tag.Content), &b); err != nil {
 			return wrapSemanticError("cbor: invalid encoded data", err)
 		}
-		if v.Type() == encodedDataType {
-			v.Set(reflect.ValueOf(EncodedData(b)))
+		if rv.Type() == encodedDataType {
+			rv.Set(reflect.ValueOf(EncodedData(b)))
 		}
 		return errors.New("TODO: implement")
 
@@ -293,8 +312,8 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return wrapSemanticError("cbor: invalid URI", err)
 		}
-		if v.Type() == urlType {
-			v.Set(reflect.ValueOf(*u))
+		if rv.Type() == urlType {
+			rv.Set(reflect.ValueOf(*u))
 		}
 		return errors.New("TODO: implement")
 
@@ -308,8 +327,8 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return wrapSemanticError("cbor: invalid base64url", err)
 		}
-		if v.Type() == base64URLStringType {
-			v.SetString(s)
+		if rv.Type() == base64URLStringType {
+			rv.SetString(s)
 		}
 		return errors.New("TODO: implement")
 
@@ -323,8 +342,8 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 		if err != nil {
 			return wrapSemanticError("cbor: invalid base64url", err)
 		}
-		if v.Type() == base64URLStringType {
-			v.SetString(s)
+		if rv.Type() == base64URLStringType {
+			rv.SetString(s)
 		}
 		return errors.New("TODO: implement")
 

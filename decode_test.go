@@ -1164,7 +1164,10 @@ func TestUnmarshal_Time(t *testing.T) {
 
 	// https://github.com/shogo82148/go-cbor/pull/67
 	t.Run("float epoch type error", func(t *testing.T) {
-		input := []byte{0xc1, 0x44, 0x30, 0x30, 0x30, 0x30}
+		input := []byte{
+			0xc1,                         // tag 1
+			0x44, 0x30, 0x30, 0x30, 0x30, // []byte("0000")
+		}
 		var got time.Time
 		err := Unmarshal(input, &got)
 		se, ok := err.(*SemanticError)
