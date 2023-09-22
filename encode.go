@@ -242,7 +242,7 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		if t.Elem().Kind() == reflect.Uint8 {
 			return arrayBytesEncoder
 		}
-		return sliceEncoder
+		return arrayEncoder
 	case reflect.Map:
 		return mapEncoder
 	case reflect.Interface:
@@ -460,7 +460,20 @@ func sliceEncoder(e *encodeState, v reflect.Value) error {
 	l := v.Len()
 	e.writeUint(majorTypeArray, uint64(l))
 	for i := 0; i < l; i++ {
-		err := e.encode(v.Index(i).Interface())
+		err := e.encodeReflectValue(v.Index(i))
+		if err != nil {
+			return err
+		}
+	}
+	e.ptrLevel--
+	return nil
+}
+
+func arrayEncoder(e *encodeState, v reflect.Value) error {
+	l := v.Len()
+	e.writeUint(majorTypeArray, uint64(l))
+	for i := 0; i < l; i++ {
+		err := e.encodeReflectValue(v.Index(i))
 		if err != nil {
 			return err
 		}
