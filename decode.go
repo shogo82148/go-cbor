@@ -1718,6 +1718,11 @@ func (d *decodeState) setBool(start int, b bool, v reflect.Value) error {
 }
 
 func (d *decodeState) setNull(start int, v reflect.Value) error {
+	if v.Type() == timeType {
+		v.SetZero()
+		return nil
+	}
+
 	switch v.Kind() {
 	case reflect.Interface, reflect.Ptr, reflect.Map, reflect.Slice:
 		v.Set(reflect.Zero(v.Type()))
@@ -1728,6 +1733,11 @@ func (d *decodeState) setNull(start int, v reflect.Value) error {
 }
 
 func (d *decodeState) setUndefined(start int, v reflect.Value) error {
+	if v.Type() == timeType {
+		v.SetZero()
+		return nil
+	}
+
 	switch v.Kind() {
 	case reflect.Interface:
 		v.Set(reflect.ValueOf(Undefined))

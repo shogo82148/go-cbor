@@ -1181,6 +1181,34 @@ func TestUnmarshal_Time(t *testing.T) {
 
 		testUnexpectedEnd(t, input)
 	})
+
+	t.Run("null", func(t *testing.T) {
+		input := []byte{0xf6}
+		got := time.Now()
+		err := Unmarshal(input, &got)
+		if err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		if !got.IsZero() {
+			t.Errorf("Unmarshal() = %v, want zero time", got)
+		}
+
+		testUnexpectedEnd(t, input)
+	})
+
+	t.Run("undefined", func(t *testing.T) {
+		input := []byte{0xf7}
+		got := time.Now()
+		err := Unmarshal(input, &got)
+		if err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		if !got.IsZero() {
+			t.Errorf("Unmarshal() = %v, want zero time", got)
+		}
+
+		testUnexpectedEnd(t, input)
+	})
 }
 
 func TestUnmarshal_BigInt(t *testing.T) {
