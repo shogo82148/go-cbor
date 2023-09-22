@@ -47,10 +47,14 @@ var Undefined undefined = nil
 // RawMessage is a raw encoded CBOR value. It implements Marshaler and
 // Unmarshaler and can be used to delay CBOR decoding or precompute a CBOR
 // encoding.
+// nil RawMessage encodes as the CBOR undefined value.
 type RawMessage []byte
 
 // MarshalCBOR returns m as the CBOR encoding of m.
 func (m RawMessage) MarshalCBOR() ([]byte, error) {
+	if m == nil {
+		return []byte{0xf7}, nil // undefined
+	}
 	return []byte(m), nil
 }
 
@@ -189,6 +193,8 @@ func (i *Integer) UnmarshalJSON(b []byte) error {
 }
 
 // EncodedData is a CBOR encoded data.
+// CBOR tags that has tag number 24 is converted to this type.
+// See RFC 8949 Section 3.4.5.1.
 type EncodedData []byte
 
 // Simple is a CBOR simple type.
@@ -222,6 +228,25 @@ type Tag struct {
 	Content any
 }
 
+// Decode decodes the tag content.
+// The following tags are supported:
+//
+//   - tag number 0: date/time string is decoded as time.Time.
+//   - tag number 1: epoch-based date/time is decoded as time.Time.
+//   - tag number 2: positive bignum is decoded as *big.Int.
+//   - tag number 3: negative bignum is decoded as *big.Int.
+//   - tag number 4: decimal fraction is not implemented.
+//   - tag number 5: bigfloat is decoded as *big.Float.
+//   - tag number 21: expected conversion to base64url is decoded as ExpectedBase64URL.
+//   - tag number 22: expected conversion to base64 is decoded as ExpectedBase64.
+//   - tag number 23: expected conversion to base16 is decoded as ExpectedBase16.
+//   - tag number 24: encoded CBOR data item is decoded as EncodedData.
+//   - tag number 32: URI is decoded as *url.URL.
+//   - tag number 33: base64url is decoded as Base64URLString.
+//   - tag number 34: base64 is decoded as Base64String.
+//   - tag number 55799: Self-Described CBOR return the content as is.
+//
+// Other tags returns tag itself.
 func (tag Tag) Decode() (any, error) {
 	switch tag.Number {
 	// tag number 0: date/time string
