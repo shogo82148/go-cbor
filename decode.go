@@ -54,6 +54,40 @@ func (e *InvalidUnmarshalError) Error() string {
 	return "cbor: Unmarshal(nil " + e.Type.String() + ")"
 }
 
+type Options struct {
+	// UseInteger will decode CBOR integers as Integer instead of Go int64.
+	UseInteger bool
+
+	// UseAnyKey will decode CBOR map keys as Go map[any]any instead of map[string]any.
+	UseAnyKey bool
+}
+
+func (o Options) set(d *decodeState) {
+	d.useInteger = o.UseInteger
+	d.useAnyKey = o.UseAnyKey
+}
+
+func (o Options) Unmarshal(data []byte, v any) error {
+	d := newDecodeState(data)
+	o.set(d)
+
+	// Check for well-formedness.
+	// Avoids filling out half a data structure
+	// before discovering a JSON syntax error.
+	if err := d.checkWellFormed(); err != nil {
+		return err
+	}
+
+	d.init(data)
+	if err := d.decode(v); err != nil {
+		return err
+	}
+	if d.savedError != nil {
+		return d.savedError
+	}
+	return nil
+}
+
 // Unmarshal parses the CBOR-encoded data and stores the result in the value pointed to by v.
 func Unmarshal(data []byte, v any) error {
 	d := newDecodeState(data)
@@ -79,6 +113,13 @@ func newDecodeState(data []byte) *decodeState {
 	d := new(decodeState)
 	d.init(data)
 	return d
+}
+
+func (d *decodeState) options() Options {
+	return Options{
+		UseInteger: d.useInteger,
+		UseAnyKey:  d.useAnyKey,
+	}
 }
 
 // An errorContext provides context for type errors during decoding.
@@ -1622,21 +1663,34 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 		return u.UnmarshalCBOR(d.data[start:d.off])
 	}
 
-	var content any
-	if err := d.decode(&content); err != nil {
-		return err
-	}
-	tag := Tag{Number: n, Content: content}
-	if d.decodingKeys || v.Type() == tagType {
-		d.setAny(start, "tag", tag, v)
-	} else {
-		decoded, err := tag.Decode()
-		if err != nil {
+	if d.decodingKeys {
+		var content any
+		if err := d.decode(&content); err != nil {
 			return err
 		}
-		d.setAny(start, "tag", decoded, v)
+		tag := Tag{Number: n, Content: content}
+		return d.setAny(start, "tag", tag, v)
 	}
-	return nil
+
+	switch v.Type() {
+	case tagType:
+		v.FieldByName("Number").SetUint(uint64(n))
+		return d.decodeReflectValue(v.FieldByName("Content"))
+	case rawTagType:
+		contentStart := d.off
+		if err := d.checkWellFormedChild(); err != nil {
+			return err
+		}
+		v.FieldByName("Number").SetUint(uint64(n))
+		v.FieldByName("Content").SetBytes(d.data[contentStart:d.off])
+	}
+
+	contentStart := d.off
+	if err := d.checkWellFormedChild(); err != nil {
+		return err
+	}
+	tag := RawTag{Number: n, Content: d.data[contentStart:d.off]}
+	return tag.decodeReflectValue(v, d.options())
 }
 
 func (d *decodeState) setSimple(start int, s Simple, v reflect.Value) error {
@@ -1675,6 +1729,11 @@ func (d *decodeState) setBool(start int, b bool, v reflect.Value) error {
 }
 
 func (d *decodeState) setNull(start int, v reflect.Value) error {
+	if v.Type() == timeType {
+		v.SetZero()
+		return nil
+	}
+
 	switch v.Kind() {
 	case reflect.Interface, reflect.Ptr, reflect.Map, reflect.Slice:
 		v.Set(reflect.Zero(v.Type()))
@@ -1685,6 +1744,11 @@ func (d *decodeState) setNull(start int, v reflect.Value) error {
 }
 
 func (d *decodeState) setUndefined(start int, v reflect.Value) error {
+	if v.Type() == timeType {
+		v.SetZero()
+		return nil
+	}
+
 	switch v.Kind() {
 	case reflect.Interface:
 		v.Set(reflect.ValueOf(Undefined))

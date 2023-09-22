@@ -345,6 +345,15 @@ var unmarshalTests = []struct {
 		},
 	},
 	{
+		"tag 1 integer to Integer",
+		[]byte{0xc1, 0x1a, 0x51, 0x4b, 0x67, 0xb0},
+		&Tag{Content: &Integer{}},
+		&Tag{
+			Number:  1,
+			Content: &Integer{Value: 1363896240},
+		},
+	},
+	{
 		"tag 1 float",
 		[]byte{0xc1, 0xfb, 0x41, 0xd4, 0x52, 0xd9, 0xec, 0x20, 0x00, 0x00},
 		new(Tag),
@@ -1155,7 +1164,10 @@ func TestUnmarshal_Time(t *testing.T) {
 
 	// https://github.com/shogo82148/go-cbor/pull/67
 	t.Run("float epoch type error", func(t *testing.T) {
-		input := []byte{0xc1, 0x44, 0x30, 0x30, 0x30, 0x30}
+		input := []byte{
+			0xc1,                         // tag 1
+			0x44, 0x30, 0x30, 0x30, 0x30, // []byte("0000")
+		}
 		var got time.Time
 		err := Unmarshal(input, &got)
 		se, ok := err.(*SemanticError)
@@ -1165,6 +1177,34 @@ func TestUnmarshal_Time(t *testing.T) {
 		}
 		if se.msg != "cbor: invalid epoch-based datetime" {
 			t.Errorf("unexpected error message: %q", se.msg)
+		}
+
+		testUnexpectedEnd(t, input)
+	})
+
+	t.Run("null", func(t *testing.T) {
+		input := []byte{0xf6}
+		got := time.Now()
+		err := Unmarshal(input, &got)
+		if err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		if !got.IsZero() {
+			t.Errorf("Unmarshal() = %v, want zero time", got)
+		}
+
+		testUnexpectedEnd(t, input)
+	})
+
+	t.Run("undefined", func(t *testing.T) {
+		input := []byte{0xf7}
+		got := time.Now()
+		err := Unmarshal(input, &got)
+		if err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		if !got.IsZero() {
+			t.Errorf("Unmarshal() = %v, want zero time", got)
 		}
 
 		testUnexpectedEnd(t, input)
@@ -1247,13 +1287,13 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err != nil {
 			t.Errorf("Unmarshal() error = %v", err)
 		}
-		got, ok := v.(*big.Float)
+		got, ok := v.(float64)
 		if !ok {
-			t.Errorf("Unmarshal() = %T, want *big.Float", v)
+			t.Errorf("Unmarshal() = %T, want float64", v)
 			return
 		}
-		want := newBigFloat("1.5")
-		if got.Cmp(want) != 0 {
+		want := 1.5
+		if got != want {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
 
