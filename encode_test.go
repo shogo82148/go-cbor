@@ -681,12 +681,12 @@ func TestMarshal(t *testing.T) {
 		{
 			"zero time",
 			time.Time{},
-			[]byte{0xf7}, // undefined
+			[]byte{0xf6}, // null
 		},
 		{
 			"year 10,000",
 			time.Date(10_000, 1, 1, 0, 0, 0, 0, time.UTC),
-			[]byte{0xf7}, // undefined
+			[]byte{0xf6}, // null
 		},
 
 		// known tag types

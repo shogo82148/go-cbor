@@ -364,8 +364,8 @@ func timeEncoder(e *encodeState, v reflect.Value) error {
 	t := v.Interface().(time.Time)
 	epoch := t.Unix()
 	nano := t.Nanosecond()
-	if epoch <= 0 || epoch >= maxEpoch {
-		return e.encodeUndefined()
+	if epoch <= minEpoch || epoch >= maxEpoch {
+		return e.encodeNull()
 	}
 
 	e.writeByte(0xc1) // tag 1: epoch-based date/time
