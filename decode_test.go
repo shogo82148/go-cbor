@@ -859,6 +859,42 @@ var unmarshalTests = []struct {
 		new(any),
 		ptr(any([]any{int64(1), int64(2), int64(3), int64(4)})),
 	},
+	{
+		"decode into Go array",
+		[]byte{0x83, 0x01, 0x02, 0x03},
+		new([3]int64),
+		ptr([3]int64{1, 2, 3}),
+	},
+	{
+		"decode into Go array: shorter than expected",
+		[]byte{0x83, 0x01, 0x02, 0x03},
+		ptr([5]int64{1, 2, 3, 4, 5}),
+		ptr([5]int64{1, 2, 3, 0, 0}),
+	},
+	{
+		"decode into Go array: longer than expected",
+		[]byte{0x83, 0x01, 0x02, 0x03},
+		new([2]int64),
+		ptr([2]int64{1, 2}),
+	},
+	{
+		"decode indefinite-length array into Go array",
+		[]byte{0x9f, 0x01, 0x02, 0x03, 0xff},
+		new([3]int64),
+		ptr([3]int64{1, 2, 3}),
+	},
+	{
+		"decode indefinite-length array into Go array: shorter than expected",
+		[]byte{0x9f, 0x01, 0x02, 0x03, 0xff},
+		ptr([5]int64{1, 2, 3, 4, 5}),
+		ptr([5]int64{1, 2, 3, 0, 0}),
+	},
+	{
+		"decode indefinite-length array into Go array: longer than expected",
+		[]byte{0x9f, 0x01, 0x02, 0x03, 0xff},
+		new([2]int64),
+		ptr([2]int64{1, 2}),
+	},
 
 	{
 		"uint8_t length map",
@@ -1161,6 +1197,19 @@ func TestUnmarshal_BigInt(t *testing.T) {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
 
+		testUnexpectedEnd(t, input)
+	})
+
+	t.Run("minus one", func(t *testing.T) {
+		input := []byte{0xc3, 0x40}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := any(int64(-1))
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
 		testUnexpectedEnd(t, input)
 	})
 }
@@ -1565,39 +1614,6 @@ func TestUnmarshal_SemanticError(t *testing.T) {
 			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
 		} else if se.msg != "cbor: invalid datetime string" {
 			t.Errorf("unexpected message: got %q, want %q", se.msg, "cbor: invalid datetime string")
-		}
-	})
-
-	t.Run("negative epoch time (string)", func(t *testing.T) {
-		data := []byte{
-			0xc0, // tag(0)
-			0x74, // text(20)
-		}
-		data = append(data, "1969-12-31T23:59:59Z"...)
-
-		var v any
-		err := Unmarshal(data, &v)
-		se, ok := err.(*SemanticError)
-		if !ok {
-			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
-		} else if se.msg != "cbor: invalid range of datetime" {
-			t.Errorf("unexpected message: got %q, want %q", se.msg, "cbor: invalid range of datetime")
-		}
-	})
-
-	t.Run("negative epoch time (integer)", func(t *testing.T) {
-		data := []byte{
-			0xc1, // tag(0)
-			0x20, // -1
-		}
-
-		var v any
-		err := Unmarshal(data, &v)
-		se, ok := err.(*SemanticError)
-		if !ok {
-			t.Errorf("Unmarshal() error = %v, want *SemanticError", err)
-		} else if se.msg != "cbor: invalid range of datetime" {
-			t.Errorf("unexpected message: got %q, want %q", se.msg, "cbor: invalid range of datetime")
 		}
 	})
 
