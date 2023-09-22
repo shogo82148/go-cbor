@@ -214,14 +214,22 @@ func (tag RawTag) decodeReflectValue(v reflect.Value) error {
 
 	// tag number 21: expected conversion to base64url
 	case tagNumberExpectedBase64URL:
-		var a any
-		if err := Unmarshal([]byte(tag.Content), &a); err != nil {
-			return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
-		}
-		if v.Type() == expectedBase64URLType {
+		t := v.Type()
+		switch {
+		case t == expectedBase64URLType:
+			if err := Unmarshal([]byte(tag.Content), v.FieldByName("Content").Interface()); err != nil {
+				return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
+			}
+		case v.Kind() == reflect.Interface && expectedBase64URLType.Implements(t):
+			var a any
+			if err := Unmarshal([]byte(tag.Content), &a); err != nil {
+				return wrapSemanticError("cbor: invalid expected conversion to base64url", err)
+			}
 			v.Set(reflect.ValueOf(ExpectedBase64URL{Content: a}))
+		default:
+			return &UnmarshalTypeError{Value: "base64url", Type: v.Type()}
 		}
-		return errors.New("TODO: implement")
+		return nil
 
 	// tag number 22: expected conversion to base64
 	case tagNumberExpectedBase64:

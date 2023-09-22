@@ -54,6 +54,36 @@ func (e *InvalidUnmarshalError) Error() string {
 	return "cbor: Unmarshal(nil " + e.Type.String() + ")"
 }
 
+type Options struct {
+	// UseInteger will decode CBOR integers as Integer instead of Go int64.
+	UseInteger bool
+
+	// UseAnyKey will decode CBOR map keys as Go map[any]any instead of map[string]any.
+	UseAnyKey bool
+}
+
+func (o *Options) Unmarshal(data []byte, v any) error {
+	d := newDecodeState(data)
+	d.useInteger = o.UseInteger
+	d.useAnyKey = o.UseAnyKey
+
+	// Check for well-formedness.
+	// Avoids filling out half a data structure
+	// before discovering a JSON syntax error.
+	if err := d.checkWellFormed(); err != nil {
+		return err
+	}
+
+	d.init(data)
+	if err := d.decode(v); err != nil {
+		return err
+	}
+	if d.savedError != nil {
+		return d.savedError
+	}
+	return nil
+}
+
 // Unmarshal parses the CBOR-encoded data and stores the result in the value pointed to by v.
 func Unmarshal(data []byte, v any) error {
 	d := newDecodeState(data)
