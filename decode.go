@@ -62,10 +62,14 @@ type Options struct {
 	UseAnyKey bool
 }
 
-func (o *Options) Unmarshal(data []byte, v any) error {
-	d := newDecodeState(data)
+func (o Options) set(d *decodeState) {
 	d.useInteger = o.UseInteger
 	d.useAnyKey = o.UseAnyKey
+}
+
+func (o Options) Unmarshal(data []byte, v any) error {
+	d := newDecodeState(data)
+	o.set(d)
 
 	// Check for well-formedness.
 	// Avoids filling out half a data structure
@@ -109,6 +113,13 @@ func newDecodeState(data []byte) *decodeState {
 	d := new(decodeState)
 	d.init(data)
 	return d
+}
+
+func (d *decodeState) options() Options {
+	return Options{
+		UseInteger: d.useInteger,
+		UseAnyKey:  d.useAnyKey,
+	}
 }
 
 // An errorContext provides context for type errors during decoding.
@@ -1679,7 +1690,7 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 		return err
 	}
 	tag := RawTag{Number: n, Content: d.data[contentStart:d.off]}
-	return tag.decodeReflectValue(v)
+	return tag.decodeReflectValue(v, d.options())
 }
 
 func (d *decodeState) setSimple(start int, s Simple, v reflect.Value) error {

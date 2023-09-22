@@ -1287,13 +1287,13 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &v); err != nil {
 			t.Errorf("Unmarshal() error = %v", err)
 		}
-		got, ok := v.(*big.Float)
+		got, ok := v.(float64)
 		if !ok {
-			t.Errorf("Unmarshal() = %T, want *big.Float", v)
+			t.Errorf("Unmarshal() = %T, want float64", v)
 			return
 		}
-		want := newBigFloat("1.5")
-		if got.Cmp(want) != 0 {
+		want := 1.5
+		if got != want {
 			t.Errorf("Unmarshal() = %x, want %x", got, want)
 		}
 
