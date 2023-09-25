@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestUnmarshal_RawTag(t *testing.T) {
+func TestRawTag(t *testing.T) {
 	t.Run("decode into RawTag", func(t *testing.T) {
 		input := []byte{0xd9, 0xff, 0xff, 0x00}
 		var got RawTag
@@ -40,6 +40,18 @@ func TestUnmarshal_RawTag(t *testing.T) {
 		err := Unmarshal(input, &got)
 		if err == nil {
 			t.Errorf("Unmarshal() error = nil, want error")
+		}
+	})
+
+	t.Run("encode RawTag", func(t *testing.T) {
+		input := RawTag{0xffff, []byte{0x00}}
+		b, err := Marshal(input)
+		if err != nil {
+			t.Errorf("Marshal() error: %v", err)
+		}
+		want := []byte{0xd9, 0xff, 0xff, 0x00}
+		if diff := cmp.Diff(want, b); diff != "" {
+			t.Errorf("Marshal() mismatch (-want +got):\n%s", diff)
 		}
 	})
 }
