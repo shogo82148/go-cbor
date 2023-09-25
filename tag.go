@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"net/url"
 	"reflect"
+	"slices"
 	"time"
 )
 
@@ -455,6 +456,34 @@ func (tag RawTag) decodeReflectValue(rv reflect.Value, opts Options) error {
 		if err := d.decodeReflectValue(rv); err != nil {
 			return err
 		}
+
+	default:
+		switch rv.Type() {
+		case tagType:
+			rv.FieldByName("Number").SetUint(uint64(tag.Number))
+			return d.decodeReflectValue(rv.FieldByName("Content"))
+		case rawTagType:
+			contentStart := d.off
+			if err := d.checkWellFormedChild(); err != nil {
+				return err
+			}
+			rv.FieldByName("Number").SetUint(uint64(tag.Number))
+			rv.FieldByName("Content").SetBytes(slices.Clone(d.data[contentStart:d.off]))
+			return nil
+		}
+		if rv.Kind() == reflect.Interface && rawTagType.Implements(rv.Type()) {
+			contentStart := d.off
+			if err := d.checkWellFormedChild(); err != nil {
+				return err
+			}
+			v := RawTag{
+				Number:  tag.Number,
+				Content: RawMessage(slices.Clone(d.data[contentStart:d.off])),
+			}
+			rv.Set(reflect.ValueOf(v))
+			return nil
+		}
+		return &UnmarshalTypeError{Value: "tag", Type: rv.Type()}
 	}
 
 	return nil
