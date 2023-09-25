@@ -191,3 +191,16 @@ func TestInteger_BigInt(t *testing.T) {
 		}
 	}
 }
+
+func TestRawMessage(t *testing.T) {
+	t.Run("nil RawMessage", func(t *testing.T) {
+		var m RawMessage
+		data, err := Marshal(m)
+		if err != nil {
+			t.Errorf("Marshal(RawMessage(nil)): error: %v", err)
+		}
+		if string(data) != "\xf6" {
+			t.Errorf("Marshal(RawMessage(nil)) = %q, want \"\\xf6\"", string(data))
+		}
+	})
+}

@@ -53,7 +53,7 @@ type RawMessage []byte
 // MarshalCBOR returns m as the CBOR encoding of m.
 func (m RawMessage) MarshalCBOR() ([]byte, error) {
 	if m == nil {
-		return []byte{0xf7}, nil // undefined
+		return []byte{0xf6}, nil // null
 	}
 	return []byte(m), nil
 }
