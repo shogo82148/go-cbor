@@ -5,7 +5,44 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
+
+func TestUnmarshal_RawTag(t *testing.T) {
+	t.Run("decode into RawTag", func(t *testing.T) {
+		input := []byte{0xd9, 0xff, 0xff, 0x00}
+		var got RawTag
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error: %v", err)
+		}
+		want := RawTag{0xffff, []byte{0x00}}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("decode into any", func(t *testing.T) {
+		input := []byte{0xd9, 0xff, 0xff, 0x00}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error: %v", err)
+		}
+		want := RawTag{0xffff, []byte{0x00}}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Unmarshal() mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("decode into any", func(t *testing.T) {
+		input := []byte{0xd9, 0xff, 0xff, 0x00}
+		var got someInterface
+		err := Unmarshal(input, &got)
+		if err == nil {
+			t.Errorf("Unmarshal() error = nil, want error")
+		}
+	})
+}
 
 func TestUnmarshal_BigInt(t *testing.T) {
 	t.Run("positive", func(t *testing.T) {

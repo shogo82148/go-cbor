@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/bits"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -1682,7 +1683,8 @@ func (d *decodeState) decodeTag(start int, n TagNumber, u Unmarshaler, v reflect
 			return err
 		}
 		v.FieldByName("Number").SetUint(uint64(n))
-		v.FieldByName("Content").SetBytes(d.data[contentStart:d.off])
+		v.FieldByName("Content").SetBytes(slices.Clone(d.data[contentStart:d.off]))
+		return nil
 	}
 
 	contentStart := d.off
