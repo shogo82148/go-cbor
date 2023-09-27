@@ -139,6 +139,32 @@ func TestUnmarshal_BigInt(t *testing.T) {
 
 		testUnexpectedEnd(t, input)
 	})
+
+	t.Run("decode MinInt64", func(t *testing.T) {
+		input := []byte{0x3b, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := any(int64(math.MinInt64))
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+		testUnexpectedEnd(t, input)
+	})
+
+	t.Run("decode MinInt64-1", func(t *testing.T) {
+		input := []byte{0x3b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := newBigInt("-9223372036854775809")
+		if got, ok := got.(*big.Int); !ok || got.Cmp(want) != 0 {
+			t.Errorf("Unmarshal() = %x, want %x", got, want)
+		}
+		testUnexpectedEnd(t, input)
+	})
 }
 
 func TestUnmarshal_BigFloat(t *testing.T) {

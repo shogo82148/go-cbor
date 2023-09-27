@@ -783,12 +783,13 @@ func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) er
 		if d.useInteger {
 			v.Set(reflect.ValueOf(Integer{Sign: true, Value: w}))
 		} else {
-			i := int64(^w)
-			if i >= 0 {
-				d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
-				break
+			if w&0x8000000000000000 != 0 {
+				i := new(big.Int).SetUint64(w)
+				i.Sub(minusOne, i)
+				v.Set(reflect.ValueOf(i))
+			} else {
+				v.Set(reflect.ValueOf(int64(^w)))
 			}
-			v.Set(reflect.ValueOf(i))
 		}
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "integer", Type: v.Type(), Offset: int64(start)})
