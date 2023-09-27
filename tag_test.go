@@ -1,6 +1,7 @@
 package cbor
 
 import (
+	"math"
 	"math/big"
 	"reflect"
 	"testing"
@@ -57,7 +58,7 @@ func TestRawTag(t *testing.T) {
 }
 
 func TestUnmarshal_BigInt(t *testing.T) {
-	t.Run("positive", func(t *testing.T) {
+	t.Run("encode into *big.Int", func(t *testing.T) {
 		input := []byte{0xc2, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 		var got *big.Int
 		if err := Unmarshal(input, &got); err != nil {
@@ -95,6 +96,47 @@ func TestUnmarshal_BigInt(t *testing.T) {
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("Unmarshal() = %v, want %v", got, want)
 		}
+		testUnexpectedEnd(t, input)
+	})
+
+	t.Run("decode MaxInt64", func(t *testing.T) {
+		input := []byte{0x1b, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := int64(math.MaxInt64)
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("(-want/+got): %s", diff)
+		}
+		testUnexpectedEnd(t, input)
+	})
+
+	t.Run("decode MaxInt64+1", func(t *testing.T) {
+		input := []byte{0x1b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := newBigInt("9223372036854775808")
+		if got, ok := got.(*big.Int); !ok || got.Cmp(want) != 0 {
+			t.Errorf("Unmarshal() = %x, want %x", got, want)
+		}
+
+		testUnexpectedEnd(t, input)
+	})
+
+	t.Run("decode MaxUint64", func(t *testing.T) {
+		input := []byte{0x1b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := newBigInt("18446744073709551615")
+		if got, ok := got.(*big.Int); !ok || got.Cmp(want) != 0 {
+			t.Errorf("Unmarshal() = %x, want %x", got, want)
+		}
+
 		testUnexpectedEnd(t, input)
 	})
 }
