@@ -833,13 +833,7 @@ func (e *encodeState) encodeBigFloat(f *big.Float) error {
 	e.writeByte(0x82) // array of length 2
 
 	// encode exponent
-	i64 := int64(exp)
-	if i64 >= 0 {
-		i64 += int64(prec) - 1
-	} else {
-		i64 -= int64(prec)
-	}
-	if err := e.encodeInt(i64); err != nil {
+	if err := e.encodeInt(int64(exp) - int64(prec)); err != nil {
 		return err
 	}
 
