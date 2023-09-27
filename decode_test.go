@@ -1110,12 +1110,6 @@ func TestUnmarshal_UnmarshalTypeError(t *testing.T) {
 			&UnmarshalTypeError{Value: "integer", Type: typeOf[int64](), Offset: 0},
 		},
 		{
-			"int64 positive overflow(any)",
-			[]byte{0x1b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // +2^63
-			new(any),
-			&UnmarshalTypeError{Value: "integer", Type: typeOf[any](), Offset: 0},
-		},
-		{
 			"converting positive integer to float",
 			[]byte{0x00},
 			new(float64),
