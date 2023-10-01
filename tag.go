@@ -371,6 +371,9 @@ func (tag RawTag) decodeReflectValue(rv reflect.Value, opts Options) error {
 	// tag number 24: encoded CBOR data item
 	case tagNumberEncodedData:
 		t := rv.Type()
+		if mt != majorTypeBytes {
+			return newSemanticError("cbor: invalid encoded data")
+		}
 		switch {
 		case t == encodedDataType:
 			if err := d.decodeReflectValue(rv); err != nil {
