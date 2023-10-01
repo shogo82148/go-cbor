@@ -442,3 +442,19 @@ func TestUnmarshal_Time(t *testing.T) {
 		testUnexpectedEnd(t, input)
 	})
 }
+
+func TestUnmarshal_EncodedData(t *testing.T) {
+	t.Run("decode undefined", func(t *testing.T) {
+		input := []byte{0xd8, 0x18, 0xf7}
+		var got EncodedData
+		err := Unmarshal(input, &got)
+		se, ok := err.(*SemanticError)
+		if !ok {
+			t.Errorf("Unmarshal() error = %v, want SemanticError", err)
+			return
+		}
+		if se.msg != "cbor: invalid encoded data" {
+			t.Errorf("unexpected error message: %q", se.msg)
+		}
+	})
+}
