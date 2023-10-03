@@ -295,7 +295,7 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		testUnexpectedEnd(t, input)
 	})
 
-	t.Run("issue 107 decode to any", func(t *testing.T) {
+	t.Run("issue 107 encode", func(t *testing.T) {
 		input := newBigFloat("-0x11p-12337")
 		got, err := Marshal(input)
 		if err != nil {
@@ -310,6 +310,27 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("(-want/+got): %s", diff)
 		}
+	})
+
+	t.Run("issue 109 decode", func(t *testing.T) {
+		input := []byte{
+			0xc5, // Tag 5
+			0x82, // Array of length 2
+			0x30, // -17
+			0xc2, // Tag 2
+			0x49, // Byte string of length 9
+			0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+		}
+		var got *big.Float
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := newBigFloatWithPrec("0x303030303030303030p-17", 9*8)
+		if got.Cmp(want) != 0 {
+			t.Errorf("Unmarshal() = %.18x, want %.18x", got, want)
+		}
+
+		testUnexpectedEnd(t, input)
 	})
 }
 

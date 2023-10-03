@@ -66,6 +66,14 @@ func newBigFloat(s string) *big.Float {
 	return f
 }
 
+func newBigFloatWithPrec(s string, prec uint) *big.Float {
+	f := new(big.Float).SetPrec(prec)
+	if _, ok := f.SetString(s); !ok {
+		panic("failed to parse big.Float: " + s)
+	}
+	return f
+}
+
 func TestMarshal(t *testing.T) {
 	tests := []struct {
 		name string
