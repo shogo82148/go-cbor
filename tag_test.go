@@ -325,7 +325,7 @@ func TestUnmarshal_BigFloat(t *testing.T) {
 		if err := Unmarshal(input, &got); err != nil {
 			t.Errorf("Unmarshal() error = %v", err)
 		}
-		want := newBigFloat("0x303030303030303030p-17")
+		want := newBigFloatWithPrec("0x303030303030303030p-17", 9*8)
 		if got.Cmp(want) != 0 {
 			t.Errorf("Unmarshal() = %.18x, want %.18x", got, want)
 		}

@@ -60,7 +60,14 @@ func newBigInt(s string) *big.Int {
 
 func newBigFloat(s string) *big.Float {
 	f := new(big.Float)
-	f.SetPrec(uint(len(s) * 8))
+	if _, ok := f.SetString(s); !ok {
+		panic("failed to parse big.Float: " + s)
+	}
+	return f
+}
+
+func newBigFloatWithPrec(s string, prec uint) *big.Float {
+	f := new(big.Float).SetPrec(prec)
 	if _, ok := f.SetString(s); !ok {
 		panic("failed to parse big.Float: " + s)
 	}
