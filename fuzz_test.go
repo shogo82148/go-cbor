@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/url"
 	"reflect"
 	"testing"
@@ -199,6 +200,14 @@ func deepEqualRV(rx, ry reflect.Value) bool {
 		x := rx.Addr().Interface().(*url.URL)
 		y := ry.Addr().Interface().(*url.URL)
 		return x.String() == y.String()
+	case bigFloatType:
+		x := rx.Addr().Interface().(*big.Float)
+		y := ry.Addr().Interface().(*big.Float)
+		return x.Cmp(y) == 0
+	case bigIntType:
+		x := rx.Addr().Interface().(*big.Int)
+		y := ry.Addr().Interface().(*big.Int)
+		return x.Cmp(y) == 0
 	}
 
 	switch rx.Kind() {
