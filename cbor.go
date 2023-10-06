@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
+	"net/netip"
 	"net/url"
 	"reflect"
 	"slices"
@@ -30,6 +31,7 @@ var tagType = reflect.TypeOf(Tag{})
 var timeType = reflect.TypeOf(time.Time{})
 var undefinedType = reflect.TypeOf(Undefined)
 var urlType = reflect.TypeOf(url.URL{})
+var netipAddrType = reflect.TypeOf(netip.Addr{})
 
 var base64StringType = reflect.TypeOf(Base64String(""))
 var base64URLStringType = reflect.TypeOf(Base64URLString(""))

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"math/big"
+	"net/netip"
 	"net/url"
 	"reflect"
 	"slices"
@@ -30,6 +31,10 @@ const (
 	tagNumberBase64URL    TagNumber = 33
 	tagNumberBase64       TagNumber = 34
 	tagNumberSelfDescribe TagNumber = 55799
+
+	// RFC 9164
+	tagNumberIPv4Address TagNumber = 52
+	tagNumberIPv6Address TagNumber = 54
 )
 
 // Tag is a CBOR tag.
@@ -452,6 +457,34 @@ func (tag RawTag) decodeReflectValue(rv reflect.Value, opts Options) error {
 		default:
 			return &UnmarshalTypeError{Value: "base64url", Type: rv.Type()}
 		}
+
+	// tag number 52: IPv4 address
+	case tagNumberIPv4Address:
+		if mt == majorTypeBytes {
+			var b []byte
+			if err := d.decode(&b); err != nil {
+				return wrapSemanticError("cbor: invalid IPv4 address", err)
+			}
+			if len(b) != 4 {
+				return newSemanticError("cbor: invalid IPv4 address")
+			}
+			var b4 [4]byte
+			copy(b4[:], b)
+			addr := netip.AddrFrom4(b4)
+
+			t := rv.Type()
+			switch {
+			case t == netipAddrType:
+				rv.Set(reflect.ValueOf(addr))
+			case rv.Kind() == reflect.Interface && netipAddrType.Implements(t):
+				rv.Set(reflect.ValueOf(addr))
+			default:
+				return &UnmarshalTypeError{Value: "IPv4 address", Type: rv.Type()}
+			}
+		}
+
+	// tag number 54: IPv6 address
+	case tagNumberIPv6Address:
 
 	// tag number 55799 Self-Described CBOR
 	case tagNumberSelfDescribe:

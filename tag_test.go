@@ -3,6 +3,7 @@ package cbor
 import (
 	"math"
 	"math/big"
+	"net/netip"
 	"reflect"
 	"testing"
 	"time"
@@ -476,6 +477,54 @@ func TestUnmarshal_EncodedData(t *testing.T) {
 		}
 		if se.msg != "cbor: invalid encoded data" {
 			t.Errorf("unexpected error message: %q", se.msg)
+		}
+	})
+}
+
+func TestUnmarshal_IPv4(t *testing.T) {
+	t.Run("decode address to any", func(t *testing.T) {
+		input := []byte{
+			0xd8, 0x34, // tag 52
+			0x44, 0xc0, 0x00, 0x02, 0x01, // []byte{192, 0, 2, 1}
+		}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := netip.AddrFrom4([4]byte{192, 0, 2, 1})
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("decode address to netip.Addr", func(t *testing.T) {
+		input := []byte{
+			0xd8, 0x34, // tag 52
+			0x44, 0xc0, 0x00, 0x02, 0x01, // []byte{192, 0, 2, 1}
+		}
+		var got netip.Addr
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := netip.AddrFrom4([4]byte{192, 0, 2, 1})
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("decode address to int", func(t *testing.T) {
+		input := []byte{
+			0xd8, 0x34, // tag 52
+			0x44, 0xc0, 0x00, 0x02, 0x01, // []byte{192, 0, 2, 1}
+		}
+		var got int
+		err := Unmarshal(input, &got)
+		if err == nil {
+			t.Fatal("Unmarshal() error = nil, want error")
+		}
+		_, ok := err.(*UnmarshalTypeError)
+		if !ok {
+			t.Fatal("Unmarshal() error is not UnmarshalTypeError")
 		}
 	})
 }
