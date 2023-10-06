@@ -1,6 +1,7 @@
 package cbor
 
 import (
+	"encoding/binary"
 	"errors"
 	"math"
 	"math/big"
@@ -480,6 +481,33 @@ func (tag RawTag) decodeReflectValue(rv reflect.Value, opts Options) error {
 				rv.Set(reflect.ValueOf(addr))
 			default:
 				return &UnmarshalTypeError{Value: "IPv4 address", Type: rv.Type()}
+			}
+		} else if mt == majorTypeArray {
+			var a []any
+			if err := d.decode(&a); err != nil {
+				return wrapSemanticError("cbor: invalid IPv4 address", err)
+			}
+			if len(a) != 2 && len(a) != 3 {
+				return newSemanticError("cbor: invalid IPv4 address")
+			}
+			if bits, ok := a[0].(int64); ok {
+				if bits < 0 || bits > 32 {
+					return newSemanticError("cbor: invalid IPv4 prefix")
+				}
+				b, ok := a[1].([]byte)
+				if !ok || len(b) > 4 || (len(b) > 0 && b[len(b)-1] == 0x00) {
+					return newSemanticError("cbor: invalid IPv4 prefix")
+				}
+				var b4 [4]byte
+				copy(b4[:], b)
+				u32 := binary.BigEndian.Uint32(b4[:])
+				if (u32 << bits) != 0 {
+					return newSemanticError("cbor: invalid IPv4 prefix")
+				}
+
+				addr := netip.AddrFrom4(b4)
+				prefix := netip.PrefixFrom(addr, int(bits))
+				rv.Set(reflect.ValueOf(prefix))
 			}
 		}
 

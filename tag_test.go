@@ -527,4 +527,39 @@ func TestUnmarshal_IPv4(t *testing.T) {
 			t.Fatal("Unmarshal() error is not UnmarshalTypeError")
 		}
 	})
+
+	t.Run("decode prefix to any", func(t *testing.T) {
+		input := []byte{
+			0xd8, 0x34, // tag 52
+			0x82,       // array of length 2
+			0x18, 0x18, // 24
+			0x43, 0xc0, 0x00, 0x02, // []byte{192, 0, 2}
+		}
+		var got any
+		if err := Unmarshal(input, &got); err != nil {
+			t.Errorf("Unmarshal() error = %v", err)
+		}
+		want := netip.PrefixFrom(netip.AddrFrom4([4]byte{192, 0, 2, 0}), 24)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Unmarshal() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("prefix ends with zero", func(t *testing.T) {
+		input := []byte{
+			0xd8, 0x34, // tag 52
+			0x82,       // array of length 2
+			0x18, 0x18, // 24
+			0x43, 0xc0, 0x00, 0x00, // []byte{192, 0, 0}
+		}
+		var got any
+		err := Unmarshal(input, &got)
+		if err == nil {
+			t.Fatal("Unmarshal() error = nil, want error")
+		}
+		_, ok := err.(*SemanticError)
+		if !ok {
+			t.Fatal("Unmarshal() error is not SemanticError")
+		}
+	})
 }
