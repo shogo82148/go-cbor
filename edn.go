@@ -318,6 +318,47 @@ func (s *ednState) encode() {
 			return
 		}
 		s.convertArray(n)
+
+	// map (0x00..0x17 pairs of data items follow)
+	case 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7:
+		n := int(typ & 0x1f)
+		s.convertMap(uint64(n))
+
+	// map (one-byte uint8_t for n follows)
+	case 0xb8:
+		n, err := s.readByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.convertMap(uint64(n))
+
+	// map (two-byte uint16_t for n follow)
+	case 0xb9:
+		n, err := s.readUint16()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.convertMap(uint64(n))
+
+	// map (four-byte uint32_t for n follow)
+	case 0xba:
+		n, err := s.readUint32()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.convertMap(uint64(n))
+
+	// map (eight-byte uint64_t for n follow)
+	case 0xbb:
+		n, err := s.readUint64()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.convertMap(n)
 	}
 }
 
@@ -364,10 +405,6 @@ func (s *ednState) convertString(n uint64) {
 }
 
 func (s *ednState) convertArray(n uint64) {
-	if !s.isAvailable(n) {
-		s.err = ErrUnexpectedEnd
-		return
-	}
 	s.buf.WriteByte('[')
 	for i := uint64(0); i < n; i++ {
 		if i > 0 {
@@ -380,4 +417,25 @@ func (s *ednState) convertArray(n uint64) {
 		}
 	}
 	s.buf.WriteByte(']')
+}
+
+func (s *ednState) convertMap(n uint64) {
+	s.buf.WriteByte('{')
+	for i := uint64(0); i < n; i++ {
+		if i > 0 {
+			s.buf.WriteByte(',')
+			s.buf.WriteByte(' ')
+		}
+		s.encode()
+		if s.err != nil {
+			return
+		}
+		s.buf.WriteByte(':')
+		s.buf.WriteByte(' ')
+		s.encode()
+		if s.err != nil {
+			return
+		}
+	}
+	s.buf.WriteByte('}')
 }
