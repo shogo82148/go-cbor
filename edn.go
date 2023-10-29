@@ -56,6 +56,15 @@ func (s *ednState) readUint32() (uint32, error) {
 	return b, nil
 }
 
+func (s *ednState) readUint64() (uint64, error) {
+	if !s.isAvailable(8) {
+		return 0, ErrUnexpectedEnd
+	}
+	b := binary.BigEndian.Uint64(s.data[s.off:])
+	s.off += 8
+	return b, nil
+}
+
 func (d *ednState) isAvailable(n uint64) bool {
 	if n > math.MaxInt {
 		// int(n) will overflow
@@ -113,6 +122,17 @@ func (s *ednState) encode() {
 		}
 		b := s.buf.AvailableBuffer()
 		b = strconv.AppendUint(b, uint64(w), 10)
+		s.buf.Write(b)
+
+	// unsigned integer (eight-byte uint64_t follows)
+	case 0x1b:
+		w, err := s.readUint64()
+		if err != nil {
+			s.err = err
+			return
+		}
+		b := s.buf.AvailableBuffer()
+		b = strconv.AppendUint(b, w, 10)
 		s.buf.Write(b)
 	}
 }
