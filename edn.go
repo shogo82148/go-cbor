@@ -196,22 +196,7 @@ func (s *ednState) encode() {
 	// byte string (0x00..0x17 bytes follow)
 	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
 		n := int(typ & 0x1f)
-		if !s.isAvailable(uint64(n)) {
-			s.err = ErrUnexpectedEnd
-			return
-		}
-		s.buf.WriteByte('h')
-		s.buf.WriteByte('\'')
-		b := s.buf.AvailableBuffer()
-		if cap(b) >= n*2 {
-			b = b[:n*2]
-		} else {
-			b = make([]byte, n*2)
-		}
-		hex.Encode(b, s.data[s.off:s.off+n])
-		s.buf.Write(b)
-		s.off += n
-		s.buf.WriteByte('\'')
+		s.decodeBytes(uint64(n))
 
 	// byte string (one-byte uint8_t for n follows)
 	case 0x58:
@@ -220,22 +205,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		if !s.isAvailable(uint64(n)) {
-			s.err = ErrUnexpectedEnd
-			return
-		}
-		s.buf.WriteByte('h')
-		s.buf.WriteByte('\'')
-		b := s.buf.AvailableBuffer()
-		if cap(b) >= int(n)*2 {
-			b = b[:int(n)*2]
-		} else {
-			b = make([]byte, int(n)*2)
-		}
-		hex.Encode(b, s.data[s.off:s.off+int(n)])
-		s.buf.Write(b)
-		s.off += int(n)
-		s.buf.WriteByte('\'')
+		s.decodeBytes(uint64(n))
 
 	// byte string (two-byte uint16_t for n follow)
 	case 0x59:
@@ -244,22 +214,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		if !s.isAvailable(uint64(n)) {
-			s.err = ErrUnexpectedEnd
-			return
-		}
-		s.buf.WriteByte('h')
-		s.buf.WriteByte('\'')
-		b := s.buf.AvailableBuffer()
-		if cap(b) >= int(n)*2 {
-			b = b[:int(n)*2]
-		} else {
-			b = make([]byte, int(n)*2)
-		}
-		hex.Encode(b, s.data[s.off:s.off+int(n)])
-		s.buf.Write(b)
-		s.off += int(n)
-		s.buf.WriteByte('\'')
+		s.decodeBytes(uint64(n))
 
 	// byte string (four-byte uint32_t for n follow)
 	case 0x5a:
@@ -268,22 +223,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		if !s.isAvailable(uint64(n)) {
-			s.err = ErrUnexpectedEnd
-			return
-		}
-		s.buf.WriteByte('h')
-		s.buf.WriteByte('\'')
-		b := s.buf.AvailableBuffer()
-		if cap(b) >= int(n)*2 {
-			b = b[:int(n)*2]
-		} else {
-			b = make([]byte, int(n)*2)
-		}
-		hex.Encode(b, s.data[s.off:s.off+int(n)])
-		s.buf.Write(b)
-		s.off += int(n)
-		s.buf.WriteByte('\'')
+		s.decodeBytes(uint64(n))
 
 	// byte string (eight-byte uint64_t for n follow)
 	case 0x5b:
@@ -292,22 +232,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		if !s.isAvailable(uint64(n)) {
-			s.err = ErrUnexpectedEnd
-			return
-		}
-		s.buf.WriteByte('h')
-		s.buf.WriteByte('\'')
-		b := s.buf.AvailableBuffer()
-		if cap(b) >= int(n)*2 {
-			b = b[:int(n)*2]
-		} else {
-			b = make([]byte, int(n)*2)
-		}
-		hex.Encode(b, s.data[s.off:s.off+int(n)])
-		s.buf.Write(b)
-		s.off += int(n)
-		s.buf.WriteByte('\'')
+		s.decodeBytes(n)
 
 	// UTF-8 string (0x00..0x17 bytes follow)
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
@@ -349,6 +274,27 @@ func (s *ednState) encode() {
 		}
 		s.decodeString(n)
 	}
+}
+
+func (s *ednState) decodeBytes(n uint64) {
+	if !s.isAvailable(n) {
+		s.err = ErrUnexpectedEnd
+		return
+	}
+	off := s.off
+	s.off += int(n)
+
+	s.buf.WriteByte('h')
+	s.buf.WriteByte('\'')
+	b := s.buf.AvailableBuffer()
+	if cap(b) >= int(n)*2 {
+		b = b[:int(n)*2]
+	} else {
+		b = make([]byte, int(n)*2)
+	}
+	hex.Encode(b, s.data[off:s.off])
+	s.buf.Write(b)
+	s.buf.WriteByte('\'')
 }
 
 func (s *ednState) decodeString(n uint64) {
