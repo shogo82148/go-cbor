@@ -359,6 +359,46 @@ func (s *ednState) encode() {
 			return
 		}
 		s.convertMap(n)
+
+	// tags
+	case 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
+		s.convertTag(uint64(typ & 0x1f))
+
+	// 1 byte tag
+	case 0xd8:
+		n, err := s.readByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.convertTag(uint64(n))
+
+	// 2 byte tag
+	case 0xd9:
+		n, err := s.readUint16()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.convertTag(uint64(n))
+
+	// 4 byte tag
+	case 0xda:
+		n, err := s.readUint32()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.convertTag(uint64(n))
+
+	// 8 byte tag
+	case 0xdb:
+		n, err := s.readUint64()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.convertTag(n)
 	}
 }
 
@@ -438,4 +478,16 @@ func (s *ednState) convertMap(n uint64) {
 		}
 	}
 	s.buf.WriteByte('}')
+}
+
+func (s *ednState) convertTag(n uint64) {
+	b := s.buf.AvailableBuffer()
+	b = strconv.AppendUint(b, n, 10)
+	s.buf.Write(b)
+	s.buf.WriteByte('(')
+	s.encode()
+	if s.err != nil {
+		return
+	}
+	s.buf.WriteByte(')')
 }
