@@ -216,6 +216,40 @@ func TestEncodeEDN(t *testing.T) {
 			in:  RawMessage{0xf7},
 			out: `undefined`,
 		},
+
+		// floats
+		{
+			in:  RawMessage{0xf9, 0x7c, 0x00},
+			out: `Infinity`,
+		},
+		{
+			in:  RawMessage{0xf9, 0x7e, 0x00},
+			out: `NaN`,
+		},
+		{
+			in:  RawMessage{0xf9, 0xfc, 0x00},
+			out: `-Infinity`,
+		},
+		{
+			in:  RawMessage{0xf9, 0x3e, 0x00},
+			out: `1.5`,
+		},
+		{
+			in:  RawMessage{0xf9, 0x00, 0x00},
+			out: `0.0`,
+		},
+		{
+			in:  RawMessage{0xf9, 0x7b, 0xff},
+			out: `65504.0`,
+		},
+		{
+			in:  RawMessage{0xfa, 0x47, 0xc3, 0x50, 0x00},
+			out: `100000.0`,
+		},
+		{
+			in:  RawMessage{0xfa, 0x7f, 0x7f, 0xff, 0xff},
+			out: `3.4028234663852886e+38`,
+		},
 	}
 
 	for _, tt := range tests {

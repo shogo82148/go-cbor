@@ -8,6 +8,8 @@ import (
 	"math"
 	"strconv"
 	"unicode/utf8"
+
+	"github.com/shogo82148/float16"
 )
 
 // ParseEDN parses the Extended Diagnostic Notation encoded data and returns the result.
@@ -423,6 +425,49 @@ func (s *ednState) encode() {
 	// undefined
 	case 0xf7:
 		s.buf.WriteString("undefined")
+
+	// simple value (one-byte uint8_t follows)
+	case 0xf8:
+		n, err := s.readByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.buf.WriteString("simple(")
+		b := s.buf.AvailableBuffer()
+		b = strconv.AppendUint(b, uint64(n), 10)
+		s.buf.Write(b)
+		s.buf.WriteByte(')')
+
+	// half-precision float (two-byte IEEE 754)
+	case 0xf9:
+		w, err := s.readUint16()
+		if err != nil {
+			s.err = err
+			return
+		}
+		f := float16.FromBits(w)
+		s.convertFloat(f.Float64())
+
+	// single-precision float (four-byte IEEE 754)
+	case 0xfa:
+		w, err := s.readUint32()
+		if err != nil {
+			s.err = err
+			return
+		}
+		f := math.Float32frombits(w)
+		s.convertFloat(float64(f))
+
+	// double-precision float (eight-byte IEEE 754)
+	case 0xfb:
+		w, err := s.readUint64()
+		if err != nil {
+			s.err = err
+			return
+		}
+		f := math.Float64frombits(w)
+		s.convertFloat(f)
 	}
 }
 
@@ -514,4 +559,25 @@ func (s *ednState) convertTag(n uint64) {
 		return
 	}
 	s.buf.WriteByte(')')
+}
+
+func (s *ednState) convertFloat(v float64) {
+	// special cases
+	switch {
+	case math.IsNaN(v):
+		s.buf.WriteString("NaN")
+		return
+	case math.IsInf(v, 1):
+		s.buf.WriteString("Infinity")
+		return
+	case math.IsInf(v, -1):
+		s.buf.WriteString("-Infinity")
+		return
+	}
+
+	str := strconv.FormatFloat(v, 'g', -1, 64)
+	if _, err := strconv.ParseInt(str, 10, 64); err == nil {
+		str = strconv.FormatFloat(v, 'f', 1, 64)
+	}
+	s.buf.WriteString(str)
 }
