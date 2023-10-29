@@ -17,6 +17,10 @@ func TestEncodeEDN(t *testing.T) {
 			in:  RawMessage{0x18, 0x18},
 			out: "24",
 		},
+		{
+			in:  RawMessage{0x19, 0x01, 0x00},
+			out: "256",
+		},
 		// {
 		// 	in: RawMessage{
 		// 		0xC0, // tag(0)

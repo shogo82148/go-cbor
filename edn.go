@@ -2,6 +2,7 @@ package cbor
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math"
 	"strconv"
 )
@@ -37,6 +38,15 @@ func (s *ednState) readByte() (byte, error) {
 	return b, nil
 }
 
+func (s *ednState) readUint16() (uint16, error) {
+	if !s.isAvailable(2) {
+		return 0, ErrUnexpectedEnd
+	}
+	b := binary.BigEndian.Uint16(s.data[s.off:])
+	s.off += 2
+	return b, nil
+}
+
 func (d *ednState) isAvailable(n uint64) bool {
 	if n > math.MaxInt {
 		// int(n) will overflow
@@ -66,6 +76,17 @@ func (s *ednState) encode() {
 	// unsigned integer (one-byte uint8_t follows)
 	case 0x18:
 		w, err := s.readByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		b := s.buf.AvailableBuffer()
+		b = strconv.AppendUint(b, uint64(w), 10)
+		s.buf.Write(b)
+
+	// unsigned integer (two-byte uint16_t follows)
+	case 0x19:
+		w, err := s.readUint16()
 		if err != nil {
 			s.err = err
 			return
