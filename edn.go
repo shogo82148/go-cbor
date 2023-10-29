@@ -134,5 +134,60 @@ func (s *ednState) encode() {
 		b := s.buf.AvailableBuffer()
 		b = strconv.AppendUint(b, w, 10)
 		s.buf.Write(b)
+
+	// negative integer -1-0x00..-1-0x17 (-1..-24)
+	case 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37:
+		b := s.buf.AvailableBuffer()
+		b = strconv.AppendInt(b, ^int64(typ&0x1f), 10)
+		s.buf.Write(b)
+
+	// negative integer (one-byte uint8_t follows)
+	case 0x38:
+		w, err := s.readByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		b := s.buf.AvailableBuffer()
+		b = strconv.AppendInt(b, ^int64(w), 10)
+		s.buf.Write(b)
+
+	// negative integer -1-n (two-byte uint16_t follows)
+	case 0x39:
+		w, err := s.readUint16()
+		if err != nil {
+			s.err = err
+			return
+		}
+		b := s.buf.AvailableBuffer()
+		b = strconv.AppendInt(b, ^int64(w), 10)
+		s.buf.Write(b)
+
+	// negative integer -1-n (four-byte uint32_t follows)
+	case 0x3a:
+		w, err := s.readUint32()
+		if err != nil {
+			s.err = err
+			return
+		}
+		b := s.buf.AvailableBuffer()
+		b = strconv.AppendInt(b, ^int64(w), 10)
+		s.buf.Write(b)
+
+	// negative integer -1-n (eight-byte uint64_t follows)
+	case 0x3b:
+		w, err := s.readUint64()
+		if err != nil {
+			s.err = err
+			return
+		}
+		b := s.buf.AvailableBuffer()
+		b = append(b, '-')
+		if w == 0xffffffffffffffff {
+			b = append(b, "18446744073709551616"...)
+		} else {
+			b = strconv.AppendUint(b, w+1, 10)
+		}
+		s.buf.Write(b)
 	}
 }

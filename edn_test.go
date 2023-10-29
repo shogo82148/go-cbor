@@ -9,9 +9,14 @@ func TestEncodeEDN(t *testing.T) {
 		in  RawMessage
 		out string
 	}{
+		// positive integers
 		{
 			in:  RawMessage{0x00},
 			out: "0",
+		},
+		{
+			in:  RawMessage{0x17},
+			out: "23",
 		},
 		{
 			in:  RawMessage{0x18, 0x18},
@@ -32,6 +37,36 @@ func TestEncodeEDN(t *testing.T) {
 		{
 			in:  RawMessage{0x1b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			out: "18446744073709551615",
+		},
+
+		// negative integers
+		{
+			in:  RawMessage{0x20},
+			out: "-1",
+		},
+		{
+			in:  RawMessage{0x37},
+			out: "-24",
+		},
+		{
+			in:  RawMessage{0x38, 0x18},
+			out: "-25",
+		},
+		{
+			in:  RawMessage{0x39, 0x01, 0x00},
+			out: "-257",
+		},
+		{
+			in:  RawMessage{0x3a, 0x00, 0x01, 0x00, 0x00},
+			out: "-65537",
+		},
+		{
+			in:  RawMessage{0x3b, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00},
+			out: "-4294967297",
+		},
+		{
+			in:  RawMessage{0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			out: "-18446744073709551616",
 		},
 
 		// {
