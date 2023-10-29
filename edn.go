@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"math"
 	"strconv"
+	"unicode/utf8"
 )
 
 // ParseEDN parses the Extended Diagnostic Notation encoded data and returns the result.
@@ -306,5 +308,66 @@ func (s *ednState) encode() {
 		s.buf.Write(b)
 		s.off += int(n)
 		s.buf.WriteByte('\'')
+
+	// UTF-8 string (0x00..0x17 bytes follow)
+	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
+		s.decodeString(uint64(typ & 0x1f))
+
+	// UTF-8 string (one-byte uint8_t for n follows)
+	case 0x78:
+		n, err := s.readByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.decodeString(uint64(n))
+
+	// UTF-8 string (two-byte uint16_t for n follow)
+	case 0x79:
+		n, err := s.readUint16()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.decodeString(uint64(n))
+
+	// UTF-8 string (four-byte uint32_t for n follow)
+	case 0x7a:
+		n, err := s.readUint32()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.decodeString(uint64(n))
+
+	// UTF-8 string (eight-byte uint64_t for n follow)
+	case 0x7b:
+		n, err := s.readUint64()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.decodeString(n)
 	}
+}
+
+func (s *ednState) decodeString(n uint64) {
+	if !s.isAvailable(n) {
+		s.err = ErrUnexpectedEnd
+		return
+	}
+	off := s.off
+	s.off += int(n)
+
+	if !utf8.Valid(s.data[off:s.off]) {
+		s.err = newSemanticError("cbor: invalid UTF-8 string")
+		return
+	}
+	v := string(s.data[off:s.off])
+	data, err := json.Marshal(v)
+	if err != nil {
+		s.err = err
+		return
+	}
+	s.buf.Write(data)
 }

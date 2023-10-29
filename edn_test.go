@@ -95,6 +95,32 @@ func TestEncodeEDN(t *testing.T) {
 			out: `h'01'`,
 		},
 
+		// utf-8 strings
+		{
+			in:  RawMessage{0x60},
+			out: `""`,
+		},
+		{
+			in:  RawMessage{0x61, 0x30},
+			out: `"0"`,
+		},
+		{
+			in:  RawMessage{0x78, 0x01, 0x30},
+			out: `"0"`,
+		},
+		{
+			in:  RawMessage{0x79, 0x00, 0x01, 0x30},
+			out: `"0"`,
+		},
+		{
+			in:  RawMessage{0x7a, 0x00, 0x00, 0x00, 0x01, 0x30},
+			out: `"0"`,
+		},
+		{
+			in:  RawMessage{0x7b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x30},
+			out: `"0"`,
+		},
+
 		// {
 		// 	in: RawMessage{
 		// 		0xC0, // tag(0)
