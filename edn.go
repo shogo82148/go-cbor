@@ -82,6 +82,10 @@ func (d *ednState) isAvailable(n uint64) bool {
 }
 
 func (s *ednState) encode() {
+	if s.err != nil {
+		return
+	}
+
 	typ, err := s.readByte()
 	if err != nil {
 		s.err = err
@@ -196,7 +200,7 @@ func (s *ednState) encode() {
 	// byte string (0x00..0x17 bytes follow)
 	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
 		n := int(typ & 0x1f)
-		s.decodeBytes(uint64(n))
+		s.convertBytes(uint64(n))
 
 	// byte string (one-byte uint8_t for n follows)
 	case 0x58:
@@ -205,7 +209,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeBytes(uint64(n))
+		s.convertBytes(uint64(n))
 
 	// byte string (two-byte uint16_t for n follow)
 	case 0x59:
@@ -214,7 +218,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeBytes(uint64(n))
+		s.convertBytes(uint64(n))
 
 	// byte string (four-byte uint32_t for n follow)
 	case 0x5a:
@@ -223,7 +227,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeBytes(uint64(n))
+		s.convertBytes(uint64(n))
 
 	// byte string (eight-byte uint64_t for n follow)
 	case 0x5b:
@@ -232,11 +236,11 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeBytes(n)
+		s.convertBytes(n)
 
 	// UTF-8 string (0x00..0x17 bytes follow)
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
-		s.decodeString(uint64(typ & 0x1f))
+		s.convertString(uint64(typ & 0x1f))
 
 	// UTF-8 string (one-byte uint8_t for n follows)
 	case 0x78:
@@ -245,7 +249,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeString(uint64(n))
+		s.convertString(uint64(n))
 
 	// UTF-8 string (two-byte uint16_t for n follow)
 	case 0x79:
@@ -254,7 +258,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeString(uint64(n))
+		s.convertString(uint64(n))
 
 	// UTF-8 string (four-byte uint32_t for n follow)
 	case 0x7a:
@@ -263,7 +267,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeString(uint64(n))
+		s.convertString(uint64(n))
 
 	// UTF-8 string (eight-byte uint64_t for n follow)
 	case 0x7b:
@@ -272,11 +276,52 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeString(n)
+		s.convertString(n)
+
+	// array (0x00..0x17 data items follow)
+	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97:
+		n := int(typ & 0x1f)
+		s.decodeArray(uint64(n))
+
+	// array (one-byte uint8_t for n follows)
+	case 0x98:
+		n, err := s.readByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.decodeArray(uint64(n))
+
+	// array (two-byte uint16_t for n follow)
+	case 0x99:
+		n, err := s.readUint16()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.decodeArray(uint64(n))
+
+	// array (four-byte uint32_t for n follow)
+	case 0x9a:
+		n, err := s.readUint32()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.decodeArray(uint64(n))
+
+	// array (eight-byte uint64_t for n follow)
+	case 0x9b:
+		n, err := s.readUint64()
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.decodeArray(n)
 	}
 }
 
-func (s *ednState) decodeBytes(n uint64) {
+func (s *ednState) convertBytes(n uint64) {
 	if !s.isAvailable(n) {
 		s.err = ErrUnexpectedEnd
 		return
@@ -297,7 +342,7 @@ func (s *ednState) decodeBytes(n uint64) {
 	s.buf.WriteByte('\'')
 }
 
-func (s *ednState) decodeString(n uint64) {
+func (s *ednState) convertString(n uint64) {
 	if !s.isAvailable(n) {
 		s.err = ErrUnexpectedEnd
 		return
@@ -316,4 +361,23 @@ func (s *ednState) decodeString(n uint64) {
 		return
 	}
 	s.buf.Write(data)
+}
+
+func (s *ednState) decodeArray(n uint64) {
+	if !s.isAvailable(n) {
+		s.err = ErrUnexpectedEnd
+		return
+	}
+	s.buf.WriteByte('[')
+	for i := uint64(0); i < n; i++ {
+		if i > 0 {
+			s.buf.WriteByte(',')
+			s.buf.WriteByte(' ')
+		}
+		s.encode()
+		if s.err != nil {
+			return
+		}
+	}
+	s.buf.WriteByte(']')
 }

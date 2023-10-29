@@ -121,6 +121,36 @@ func TestEncodeEDN(t *testing.T) {
 			out: `"0"`,
 		},
 
+		// arrays
+		{
+			in:  RawMessage{0x80},
+			out: `[]`,
+		},
+		{
+			in:  RawMessage{0x81, 0x00},
+			out: `[0]`,
+		},
+		{
+			in:  RawMessage{0x82, 0x00, 0x01},
+			out: `[0, 1]`,
+		},
+		{
+			in:  RawMessage{0x98, 0x02, 0x00, 0x01},
+			out: `[0, 1]`,
+		},
+		{
+			in:  RawMessage{0x99, 0x00, 0x02, 0x00, 0x01},
+			out: `[0, 1]`,
+		},
+		{
+			in:  RawMessage{0x9a, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01},
+			out: `[0, 1]`,
+		},
+		{
+			in:  RawMessage{0x9b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01},
+			out: `[0, 1]`,
+		},
+
 		// {
 		// 	in: RawMessage{
 		// 		0xC0, // tag(0)
