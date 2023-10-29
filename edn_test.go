@@ -194,6 +194,28 @@ func TestEncodeEDN(t *testing.T) {
 			},
 			out: `1(1363896240)`,
 		},
+
+		// simple values
+		{
+			in:  RawMessage{0xe0},
+			out: `simple(0)`,
+		},
+		{
+			in:  RawMessage{0xf4},
+			out: `false`,
+		},
+		{
+			in:  RawMessage{0xf5},
+			out: `true`,
+		},
+		{
+			in:  RawMessage{0xf6},
+			out: `null`,
+		},
+		{
+			in:  RawMessage{0xf7},
+			out: `undefined`,
+		},
 	}
 
 	for _, tt := range tests {

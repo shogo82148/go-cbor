@@ -399,6 +399,30 @@ func (s *ednState) encode() {
 			return
 		}
 		s.convertTag(n)
+
+	// simple values
+	case 0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xf0, 0xf3:
+		s.buf.WriteString("simple(")
+		b := s.buf.AvailableBuffer()
+		b = strconv.AppendUint(b, uint64(typ&0x1f), 10)
+		s.buf.Write(b)
+		s.buf.WriteByte(')')
+
+	// false
+	case 0xf4:
+		s.buf.WriteString("false")
+
+	// true
+	case 0xf5:
+		s.buf.WriteString("true")
+
+	// null
+	case 0xf6:
+		s.buf.WriteString("null")
+
+	// undefined
+	case 0xf7:
+		s.buf.WriteString("undefined")
 	}
 }
 
