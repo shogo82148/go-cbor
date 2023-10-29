@@ -281,7 +281,7 @@ func (s *ednState) encode() {
 	// array (0x00..0x17 data items follow)
 	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97:
 		n := int(typ & 0x1f)
-		s.decodeArray(uint64(n))
+		s.convertArray(uint64(n))
 
 	// array (one-byte uint8_t for n follows)
 	case 0x98:
@@ -290,7 +290,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeArray(uint64(n))
+		s.convertArray(uint64(n))
 
 	// array (two-byte uint16_t for n follow)
 	case 0x99:
@@ -299,7 +299,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeArray(uint64(n))
+		s.convertArray(uint64(n))
 
 	// array (four-byte uint32_t for n follow)
 	case 0x9a:
@@ -308,7 +308,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeArray(uint64(n))
+		s.convertArray(uint64(n))
 
 	// array (eight-byte uint64_t for n follow)
 	case 0x9b:
@@ -317,7 +317,7 @@ func (s *ednState) encode() {
 			s.err = err
 			return
 		}
-		s.decodeArray(n)
+		s.convertArray(n)
 	}
 }
 
@@ -363,7 +363,7 @@ func (s *ednState) convertString(n uint64) {
 	s.buf.Write(data)
 }
 
-func (s *ednState) decodeArray(n uint64) {
+func (s *ednState) convertArray(n uint64) {
 	if !s.isAvailable(n) {
 		s.err = ErrUnexpectedEnd
 		return
