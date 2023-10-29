@@ -3,6 +3,7 @@ package cbor
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"math"
 	"strconv"
 )
@@ -189,5 +190,121 @@ func (s *ednState) encode() {
 			b = strconv.AppendUint(b, w+1, 10)
 		}
 		s.buf.Write(b)
+
+	// byte string (0x00..0x17 bytes follow)
+	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
+		n := int(typ & 0x1f)
+		if !s.isAvailable(uint64(n)) {
+			s.err = ErrUnexpectedEnd
+			return
+		}
+		s.buf.WriteByte('h')
+		s.buf.WriteByte('\'')
+		b := s.buf.AvailableBuffer()
+		if cap(b) >= n*2 {
+			b = b[:n*2]
+		} else {
+			b = make([]byte, n*2)
+		}
+		hex.Encode(b, s.data[s.off:s.off+n])
+		s.buf.Write(b)
+		s.off += n
+		s.buf.WriteByte('\'')
+
+	// byte string (one-byte uint8_t for n follows)
+	case 0x58:
+		n, err := s.readByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if !s.isAvailable(uint64(n)) {
+			s.err = ErrUnexpectedEnd
+			return
+		}
+		s.buf.WriteByte('h')
+		s.buf.WriteByte('\'')
+		b := s.buf.AvailableBuffer()
+		if cap(b) >= int(n)*2 {
+			b = b[:int(n)*2]
+		} else {
+			b = make([]byte, int(n)*2)
+		}
+		hex.Encode(b, s.data[s.off:s.off+int(n)])
+		s.buf.Write(b)
+		s.off += int(n)
+		s.buf.WriteByte('\'')
+
+	// byte string (two-byte uint16_t for n follow)
+	case 0x59:
+		n, err := s.readUint16()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if !s.isAvailable(uint64(n)) {
+			s.err = ErrUnexpectedEnd
+			return
+		}
+		s.buf.WriteByte('h')
+		s.buf.WriteByte('\'')
+		b := s.buf.AvailableBuffer()
+		if cap(b) >= int(n)*2 {
+			b = b[:int(n)*2]
+		} else {
+			b = make([]byte, int(n)*2)
+		}
+		hex.Encode(b, s.data[s.off:s.off+int(n)])
+		s.buf.Write(b)
+		s.off += int(n)
+		s.buf.WriteByte('\'')
+
+	// byte string (four-byte uint32_t for n follow)
+	case 0x5a:
+		n, err := s.readUint32()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if !s.isAvailable(uint64(n)) {
+			s.err = ErrUnexpectedEnd
+			return
+		}
+		s.buf.WriteByte('h')
+		s.buf.WriteByte('\'')
+		b := s.buf.AvailableBuffer()
+		if cap(b) >= int(n)*2 {
+			b = b[:int(n)*2]
+		} else {
+			b = make([]byte, int(n)*2)
+		}
+		hex.Encode(b, s.data[s.off:s.off+int(n)])
+		s.buf.Write(b)
+		s.off += int(n)
+		s.buf.WriteByte('\'')
+
+	// byte string (eight-byte uint64_t for n follow)
+	case 0x5b:
+		n, err := s.readUint64()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if !s.isAvailable(uint64(n)) {
+			s.err = ErrUnexpectedEnd
+			return
+		}
+		s.buf.WriteByte('h')
+		s.buf.WriteByte('\'')
+		b := s.buf.AvailableBuffer()
+		if cap(b) >= int(n)*2 {
+			b = b[:int(n)*2]
+		} else {
+			b = make([]byte, int(n)*2)
+		}
+		hex.Encode(b, s.data[s.off:s.off+int(n)])
+		s.buf.Write(b)
+		s.off += int(n)
+		s.buf.WriteByte('\'')
 	}
 }

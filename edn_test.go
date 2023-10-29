@@ -69,6 +69,32 @@ func TestEncodeEDN(t *testing.T) {
 			out: "-18446744073709551616",
 		},
 
+		// byte strings
+		{
+			in:  RawMessage{0x40},
+			out: `h''`,
+		},
+		{
+			in:  RawMessage{0x41, 0x01},
+			out: `h'01'`,
+		},
+		{
+			in:  RawMessage{0x58, 0x01, 0x01},
+			out: `h'01'`,
+		},
+		{
+			in:  RawMessage{0x59, 0x00, 0x01, 0x01},
+			out: `h'01'`,
+		},
+		{
+			in:  RawMessage{0x5a, 0x00, 0x00, 0x00, 0x01, 0x01},
+			out: `h'01'`,
+		},
+		{
+			in:  RawMessage{0x5b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01},
+			out: `h'01'`,
+		},
+
 		// {
 		// 	in: RawMessage{
 		// 		0xC0, // tag(0)
@@ -86,7 +112,7 @@ func TestEncodeEDN(t *testing.T) {
 			continue
 		}
 		if string(got) != tt.out {
-			t.Errorf("EncodeEDN() = %s, want %s", got, tt.out)
+			t.Errorf("EncodeEDN(%x) = %s, want %s", []byte(tt.in), got, tt.out)
 		}
 	}
 }
