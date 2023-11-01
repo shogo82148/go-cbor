@@ -14,12 +14,25 @@ import (
 
 // ParseEDN parses the Extended Diagnostic Notation encoded data and returns the result.
 func ParseEDN(data []byte) (RawMessage, error) {
-	return nil, nil
+	s := ednDecState{data: data}
+	s.decode()
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.buf.Bytes(), nil
 }
+
+type ednDecState struct {
+	buf  bytes.Buffer
+	data []byte
+	err  error
+}
+
+func (s *ednDecState) decode() {}
 
 // EncodeEDN returns the Extended Diagnostic Notation encoding of msg.
 func (m RawMessage) EncodeEDN() ([]byte, error) {
-	s := ednState{data: m}
+	s := ednEncState{data: m}
 	s.encode()
 	if s.err != nil {
 		return nil, s.err
@@ -27,14 +40,14 @@ func (m RawMessage) EncodeEDN() ([]byte, error) {
 	return s.buf.Bytes(), nil
 }
 
-type ednState struct {
+type ednEncState struct {
 	buf  bytes.Buffer
 	data RawMessage
 	off  int // next read offset in data
 	err  error
 }
 
-func (s *ednState) readByte() (byte, error) {
+func (s *ednEncState) readByte() (byte, error) {
 	if !s.isAvailable(1) {
 		return 0, ErrUnexpectedEnd
 	}
@@ -43,14 +56,14 @@ func (s *ednState) readByte() (byte, error) {
 	return b, nil
 }
 
-func (s *ednState) peekByte() (byte, error) {
+func (s *ednEncState) peekByte() (byte, error) {
 	if !s.isAvailable(1) {
 		return 0, ErrUnexpectedEnd
 	}
 	return s.data[s.off], nil
 }
 
-func (s *ednState) readUint16() (uint16, error) {
+func (s *ednEncState) readUint16() (uint16, error) {
 	if !s.isAvailable(2) {
 		return 0, ErrUnexpectedEnd
 	}
@@ -59,7 +72,7 @@ func (s *ednState) readUint16() (uint16, error) {
 	return b, nil
 }
 
-func (s *ednState) readUint32() (uint32, error) {
+func (s *ednEncState) readUint32() (uint32, error) {
 	if !s.isAvailable(4) {
 		return 0, ErrUnexpectedEnd
 	}
@@ -68,7 +81,7 @@ func (s *ednState) readUint32() (uint32, error) {
 	return b, nil
 }
 
-func (s *ednState) readUint64() (uint64, error) {
+func (s *ednEncState) readUint64() (uint64, error) {
 	if !s.isAvailable(8) {
 		return 0, ErrUnexpectedEnd
 	}
@@ -77,7 +90,7 @@ func (s *ednState) readUint64() (uint64, error) {
 	return b, nil
 }
 
-func (d *ednState) isAvailable(n uint64) bool {
+func (d *ednEncState) isAvailable(n uint64) bool {
 	if n > math.MaxInt {
 		// int(n) will overflow
 		return false
@@ -90,7 +103,7 @@ func (d *ednState) isAvailable(n uint64) bool {
 	return newOffset <= len(d.data)
 }
 
-func (s *ednState) encode() {
+func (s *ednEncState) encode() {
 	if s.err != nil {
 		return
 	}
@@ -602,7 +615,7 @@ func (s *ednState) encode() {
 	}
 }
 
-func (s *ednState) convertBytes(n uint64) {
+func (s *ednEncState) convertBytes(n uint64) {
 	if !s.isAvailable(n) {
 		s.err = ErrUnexpectedEnd
 		return
@@ -623,7 +636,7 @@ func (s *ednState) convertBytes(n uint64) {
 	s.buf.WriteByte('\'')
 }
 
-func (s *ednState) convertString(n uint64) {
+func (s *ednEncState) convertString(n uint64) {
 	if !s.isAvailable(n) {
 		s.err = ErrUnexpectedEnd
 		return
@@ -644,7 +657,7 @@ func (s *ednState) convertString(n uint64) {
 	s.buf.Write(data)
 }
 
-func (s *ednState) convertArray(n uint64) {
+func (s *ednEncState) convertArray(n uint64) {
 	s.buf.WriteByte('[')
 	for i := uint64(0); i < n; i++ {
 		if i > 0 {
@@ -659,7 +672,7 @@ func (s *ednState) convertArray(n uint64) {
 	s.buf.WriteByte(']')
 }
 
-func (s *ednState) convertMap(n uint64) {
+func (s *ednEncState) convertMap(n uint64) {
 	s.buf.WriteByte('{')
 	for i := uint64(0); i < n; i++ {
 		if i > 0 {
@@ -680,7 +693,7 @@ func (s *ednState) convertMap(n uint64) {
 	s.buf.WriteByte('}')
 }
 
-func (s *ednState) convertTag(n uint64) {
+func (s *ednEncState) convertTag(n uint64) {
 	b := s.buf.AvailableBuffer()
 	b = strconv.AppendUint(b, n, 10)
 	s.buf.Write(b)
@@ -692,7 +705,7 @@ func (s *ednState) convertTag(n uint64) {
 	s.buf.WriteByte(')')
 }
 
-func (s *ednState) convertFloat(v float64) {
+func (s *ednEncState) convertFloat(v float64) {
 	// special cases
 	switch {
 	case math.IsNaN(v):
