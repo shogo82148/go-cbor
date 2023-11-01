@@ -7,12 +7,13 @@ import (
 	"io"
 	"math"
 	"math/big"
-	"math/bits"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/shogo82148/float16"
 )
 
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
@@ -806,35 +807,8 @@ func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) er
 }
 
 func (d *decodeState) decodeFloat16(start int, w uint16, v reflect.Value) error {
-	sign := uint64(w&0x8000) << (64 - 16)
-	exp := uint64(w>>10) & 0x1f
-	frac := uint64(w & 0x03ff)
-
-	switch {
-	case exp == 0:
-		// zero or subnormal
-		l := bits.Len64(frac)
-		if l == 0 {
-			// zero
-			exp = 0
-		} else {
-			// subnormal
-			frac = (frac << (53 - uint64(l))) & (1<<52 - 1)
-			exp = 1023 - (15 + 10) + uint64(l)
-		}
-	case exp == 0x1f:
-		// infinity or NaN
-		exp = 0x7ff
-		if frac != 0 {
-			frac = 1 << 51
-		}
-	default:
-		// normal number
-		exp += 1023 - 15
-		frac <<= 52 - 10
-	}
-	f := math.Float64frombits(sign | exp<<52 | uint64(frac))
-	return d.decodeFloat(start, f, v)
+	f := float16.FromBits(w)
+	return d.decodeFloat(start, f.Float64(), v)
 }
 
 func (d *decodeState) decodeFloat32(start int, w uint32, v reflect.Value) error {
