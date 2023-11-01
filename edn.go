@@ -247,6 +247,43 @@ func (s *ednState) encode() {
 		}
 		s.convertBytes(n)
 
+	// byte string (indefinite length)
+	case 0x5f:
+		tye, err := s.peekByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if tye == 0xff {
+			s.off++
+			s.buf.WriteString("''_")
+			break
+		}
+		if typ&0xe0 != 0x40 {
+			s.err = newSemanticError("cbor: invalid byte string")
+			return
+		}
+		s.buf.WriteString("(_ ")
+		s.encode()
+		for {
+			typ, err := s.peekByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if typ == 0xff {
+				s.off++
+				break
+			}
+			if typ&0xe0 != 0x40 {
+				s.err = newSemanticError("cbor: invalid byte string")
+				return
+			}
+			s.buf.WriteString(", ")
+			s.encode()
+		}
+		s.buf.WriteByte(')')
+
 	// UTF-8 string (0x00..0x17 bytes follow)
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
 		s.convertString(uint64(typ & 0x1f))
@@ -286,6 +323,40 @@ func (s *ednState) encode() {
 			return
 		}
 		s.convertString(n)
+
+	// byte string (indefinite length)
+	case 0x7f:
+		tye, err := s.peekByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if tye == 0xff {
+			s.off++
+			s.buf.WriteString(`""_`)
+			break
+		}
+
+		s.buf.WriteString("(_ ")
+		s.encode()
+		for {
+			typ, err := s.peekByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if typ == 0xff {
+				s.off++
+				break
+			}
+			if typ&0xe0 != 0x60 {
+				s.err = newSemanticError("cbor: invalid byte string")
+				return
+			}
+			s.buf.WriteString(", ")
+			s.encode()
+		}
+		s.buf.WriteByte(')')
 
 	// array (0x00..0x17 data items follow)
 	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97:

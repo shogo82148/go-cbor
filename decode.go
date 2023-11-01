@@ -1887,7 +1887,7 @@ func (d *decodeState) checkWellFormedChild() error {
 				d.off++
 				break
 			}
-			if typ < 0x40 || typ > 0x5b {
+			if typ&0xe0 != 0x40 {
 				return errors.New("cbor: invalid byte string")
 			}
 			if err := d.checkWellFormedChild(); err != nil {
