@@ -577,6 +577,8 @@ func (s *ednState) convertFloat(v float64) {
 
 	str := strconv.FormatFloat(v, 'g', -1, 64)
 	if _, err := strconv.ParseInt(str, 10, 64); err == nil {
+		// float point number and integer should be distinguished.
+		// e.g. float64(1) -> "1.0"
 		str = strconv.FormatFloat(v, 'f', 1, 64)
 	}
 	s.buf.WriteString(str)
