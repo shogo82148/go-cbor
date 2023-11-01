@@ -391,6 +391,37 @@ func (s *ednState) encode() {
 		}
 		s.convertMap(n)
 
+	// map (indefinite length)
+	case 0xbf:
+		s.buf.WriteString("{_ ")
+		first := true
+		for {
+			typ, err := s.peekByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if typ == 0xff {
+				s.off++
+				break
+			}
+			if !first {
+				s.buf.WriteString(", ")
+			}
+			first = false
+			s.encode()
+			if s.err != nil {
+				return
+			}
+			s.buf.WriteByte(':')
+			s.buf.WriteByte(' ')
+			s.encode()
+			if s.err != nil {
+				return
+			}
+		}
+		s.buf.WriteByte('}')
+
 	// tags
 	case 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
 		s.convertTag(uint64(typ & 0x1f))
