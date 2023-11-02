@@ -79,6 +79,7 @@ func (d *ednDecState) writeUint(major majorType, v uint64) {
 	}
 }
 
+// skipWhitespace skips the whitespace.
 func (d *ednDecState) skipWhitespace() {
 	for {
 		ch, err := d.peekByte()
@@ -93,6 +94,23 @@ func (d *ednDecState) skipWhitespace() {
 			return
 		}
 	}
+}
+
+// expectWhitespace skips the whitespace and returns the next byte.
+func (d *ednDecState) expectWhitespace() {
+	ch, err := d.peekByte()
+	if err != nil {
+		d.err = err
+		return
+	}
+	switch ch {
+	case ' ', '\t', '\r', '\n':
+		d.off++
+	default:
+		d.err = newSemanticError("cbor: expected whitespace")
+		return
+	}
+	d.skipWhitespace()
 }
 
 func (s *ednDecState) decode() {
@@ -115,6 +133,33 @@ func (s *ednDecState) decode() {
 	}
 }
 
+func (s *ednDecState) decodeEncodingIndicator() int {
+	ch, err := s.peekByte()
+	if err != nil {
+		s.err = err
+		return 0
+	}
+	if ch != '_' {
+		return 0
+	}
+	s.off++
+
+	ch, err = s.peekByte()
+	if err != nil {
+		s.err = err
+		return 0
+	}
+	switch ch {
+	case '1', '2', '3', '4', '5', '6', '7':
+		s.off++
+		s.expectWhitespace()
+		return int(ch - '0')
+	default:
+		s.expectWhitespace()
+		return 7
+	}
+}
+
 func (s *ednDecState) decodeNumber() {
 	s.buf.WriteByte(0x00)
 	s.off++
@@ -131,6 +176,38 @@ func (s *ednDecState) decodeArray() {
 		return
 	}
 	s.off++
+
+	ind := s.decodeEncodingIndicator()
+	if s.err != nil {
+		return
+	}
+
+	if ind == 7 {
+		// indefinite length array
+		s.buf.WriteByte(0x9f)
+		for {
+			s.skipWhitespace()
+			if s.err != nil {
+				return
+			}
+			ch, err := s.peekByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if ch == ']' {
+				// end of array
+				s.off++
+				break
+			}
+			s.decode()
+			if s.err != nil {
+				return
+			}
+		}
+		s.buf.WriteByte(0xff)
+		return
+	}
 
 	t := &ednDecState{data: s.data, off: s.off}
 	var count uint64
@@ -150,6 +227,16 @@ func (s *ednDecState) decodeArray() {
 			t.off++
 			break
 		}
+		if count > 0 {
+			if ch == ',' {
+				t.off++
+			} else {
+				s.err = newSemanticError("cbor: expected comma")
+				return
+			}
+		}
+
+		// next element
 		count++
 		t.decode()
 		if t.err != nil {
