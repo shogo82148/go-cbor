@@ -12,6 +12,8 @@ import (
 	"github.com/shogo82148/float16"
 )
 
+type encodingIndicator int
+
 // DecodeEDN parses the Extended Diagnostic Notation encoded data and returns the result.
 func DecodeEDN(data []byte) (RawMessage, error) {
 	s := ednDecState{data: data}
@@ -59,21 +61,35 @@ func (s *ednDecState) writeUint64(v uint64) {
 	s.buf.Write(buf[:])
 }
 
-func (d *ednDecState) writeUint(major majorType, v uint64) {
+func (d *ednDecState) writeUint(major majorType, ind encodingIndicator, v uint64) {
 	bits := byte(major) << 5
-	switch {
-	case v < 24:
+	if ind < 0 && v < 24 {
 		d.writeByte(bits | byte(v))
+		return
+	}
+
+	switch {
 	case v < 0x100:
+		ind = max(ind, 0)
+	case v < 0x10000:
+		ind = max(ind, 1)
+	case v < 0x100000000:
+		ind = max(ind, 2)
+	default:
+		ind = max(ind, 3)
+	}
+
+	switch ind {
+	case 0:
 		d.writeByte(bits | 24)
 		d.writeByte(byte(v))
-	case v < 0x10000:
+	case 1:
 		d.writeByte(bits | 25)
 		d.writeUint16(uint16(v))
-	case v < 0x100000000:
+	case 2:
 		d.writeByte(bits | 26)
 		d.writeUint32(uint32(v))
-	default:
+	case 3:
 		d.writeByte(bits | 27)
 		d.writeUint64(v)
 	}
@@ -133,27 +149,27 @@ func (s *ednDecState) decode() {
 	}
 }
 
-func (s *ednDecState) decodeEncodingIndicator() int {
+func (s *ednDecState) decodeEncodingIndicator() encodingIndicator {
 	ch, err := s.peekByte()
 	if err != nil {
 		s.err = err
-		return 0
+		return -1
 	}
 	if ch != '_' {
-		return 0
+		return -1
 	}
 	s.off++
 
 	ch, err = s.peekByte()
 	if err != nil {
 		s.err = err
-		return 0
+		return -1
 	}
 	switch ch {
-	case '1', '2', '3', '4', '5', '6', '7':
+	case '0', '1', '2', '3', '4', '5', '6', '7':
 		s.off++
 		s.expectWhitespace()
-		return int(ch - '0')
+		return encodingIndicator(ch - '0')
 	default:
 		s.expectWhitespace()
 		return 7
@@ -245,7 +261,7 @@ func (s *ednDecState) decodeArray() {
 		}
 	}
 	s.off = t.off
-	s.writeUint(majorTypeArray, count)
+	s.writeUint(majorTypeArray, ind, count)
 	t.buf.WriteTo(&s.buf)
 }
 

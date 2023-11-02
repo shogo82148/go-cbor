@@ -11,7 +11,7 @@ func TestDecodeEDN(t *testing.T) {
 		in  string
 		out RawMessage
 	}{
-		// // positive integers
+		// positive integers
 		{
 			in:  "0",
 			out: RawMessage{0x00},
@@ -27,8 +27,24 @@ func TestDecodeEDN(t *testing.T) {
 			out: RawMessage{0x81, 0x00},
 		},
 		{
-			in:  "[0, [0, 0]]",
-			out: RawMessage{0x82, 0x00, 0x80, 0x00, 0x00},
+			in:  "[_0 0]",
+			out: RawMessage{0x98, 0x01, 0x00},
+		},
+		{
+			in:  "[_1 0]",
+			out: RawMessage{0x99, 0x00, 0x01, 0x00},
+		},
+		{
+			in:  "[_2 0]",
+			out: RawMessage{0x9a, 0x00, 0x00, 0x00, 0x01, 0x00},
+		},
+		{
+			in:  "[_3 0]",
+			out: RawMessage{0x9b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00},
+		},
+		{
+			in:  "[_7 0]",
+			out: RawMessage{0x9f, 0x00, 0xff},
 		},
 		{
 			in:  "[_ 0]",
