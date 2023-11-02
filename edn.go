@@ -197,6 +197,9 @@ LOOP:
 		// exponent
 		case 'p', 'P':
 
+		// prefix
+		case 'x', 'X', 'o', 'O':
+
 		default:
 			break LOOP
 		}
@@ -205,7 +208,7 @@ LOOP:
 
 	// try to parse as an integer
 	str := string(s.data[start:end])
-	if ok := s.tryToDecodeInteger(str); ok {
+	if s.tryToDecodeInteger(str) {
 		return
 	}
 }
@@ -219,6 +222,15 @@ func (s *ednDecState) tryToDecodeInteger(str string) bool {
 	if i.Sign() >= 0 {
 		if i.IsUint64() {
 			s.writeUint(majorTypePositiveInt, -1, i.Uint64())
+		} else {
+			// TODO: support big.Int
+			s.err = newSemanticError("cbor: unsupported big.Int")
+			return true
+		}
+	} else {
+		i.Not(i)
+		if i.IsUint64() {
+			s.writeUint(majorTypeNegativeInt, -1, i.Uint64())
 		} else {
 			// TODO: support big.Int
 			s.err = newSemanticError("cbor: unsupported big.Int")
