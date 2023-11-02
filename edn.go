@@ -12,8 +12,8 @@ import (
 	"github.com/shogo82148/float16"
 )
 
-// ParseEDN parses the Extended Diagnostic Notation encoded data and returns the result.
-func ParseEDN(data []byte) (RawMessage, error) {
+// DecodeEDN parses the Extended Diagnostic Notation encoded data and returns the result.
+func DecodeEDN(data []byte) (RawMessage, error) {
 	s := ednDecState{data: data}
 	s.decode()
 	if s.err != nil {
@@ -25,10 +25,142 @@ func ParseEDN(data []byte) (RawMessage, error) {
 type ednDecState struct {
 	buf  bytes.Buffer
 	data []byte
+	off  int // next read offset in data
 	err  error
 }
 
-func (s *ednDecState) decode() {}
+func (d *ednDecState) peekByte() (byte, error) {
+	if d.off >= len(d.data) {
+		return 0, ErrUnexpectedEnd
+	}
+	b := d.data[d.off]
+	return b, nil
+}
+
+func (s *ednDecState) writeByte(v byte) {
+	s.buf.WriteByte(v)
+}
+
+func (s *ednDecState) writeUint16(v uint16) {
+	var buf [2]byte
+	binary.BigEndian.PutUint16(buf[:], v)
+	s.buf.Write(buf[:])
+}
+
+func (s *ednDecState) writeUint32(v uint32) {
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], v)
+	s.buf.Write(buf[:])
+}
+
+func (s *ednDecState) writeUint64(v uint64) {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], v)
+	s.buf.Write(buf[:])
+}
+
+func (d *ednDecState) writeUint(major majorType, v uint64) {
+	bits := byte(major) << 5
+	switch {
+	case v < 24:
+		d.writeByte(bits | byte(v))
+	case v < 0x100:
+		d.writeByte(bits | 24)
+		d.writeByte(byte(v))
+	case v < 0x10000:
+		d.writeByte(bits | 25)
+		d.writeUint16(uint16(v))
+	case v < 0x100000000:
+		d.writeByte(bits | 26)
+		d.writeUint32(uint32(v))
+	default:
+		d.writeByte(bits | 27)
+		d.writeUint64(v)
+	}
+}
+
+func (d *ednDecState) skipWhitespace() {
+	for {
+		ch, err := d.peekByte()
+		if err != nil {
+			d.err = err
+			return
+		}
+		switch ch {
+		case ' ', '\t', '\r', '\n':
+			d.off++
+		default:
+			return
+		}
+	}
+}
+
+func (s *ednDecState) decode() {
+	s.skipWhitespace()
+	if s.err != nil {
+		return
+	}
+
+	ch, err := s.peekByte()
+	if err != nil {
+		s.err = err
+		return
+	}
+	switch ch {
+	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '-':
+		// integer or float
+		s.decodeNumber()
+	case '[':
+		s.decodeArray()
+	}
+}
+
+func (s *ednDecState) decodeNumber() {
+	s.buf.WriteByte(0x00)
+	s.off++
+}
+
+func (s *ednDecState) decodeArray() {
+	ch, err := s.peekByte()
+	if err != nil {
+		s.err = err
+		return
+	}
+	if ch != '[' {
+		s.err = newSemanticError("cbor: invalid array")
+		return
+	}
+	s.off++
+
+	t := &ednDecState{data: s.data, off: s.off}
+	var count uint64
+	for {
+		t.skipWhitespace()
+		if t.err != nil {
+			s.err = t.err
+			return
+		}
+		ch, err := t.peekByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if ch == ']' {
+			// end of array
+			t.off++
+			break
+		}
+		count++
+		t.decode()
+		if t.err != nil {
+			s.err = t.err
+			return
+		}
+	}
+	s.off = t.off
+	s.writeUint(majorTypeArray, count)
+	t.buf.WriteTo(&s.buf)
+}
 
 // EncodeEDN returns the Extended Diagnostic Notation encoding of msg.
 func (m RawMessage) EncodeEDN() ([]byte, error) {

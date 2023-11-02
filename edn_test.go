@@ -1,8 +1,43 @@
 package cbor
 
 import (
+	"bytes"
+	"encoding/hex"
 	"testing"
 )
+
+func TestDecodeEDN(t *testing.T) {
+	tests := []struct {
+		in  string
+		out RawMessage
+	}{
+		// positive integers
+		{
+			in:  "0",
+			out: RawMessage{0x00},
+		},
+
+		// arrays
+		{
+			in:  "[]",
+			out: RawMessage{0x80},
+		},
+		{
+			in:  "[0]",
+			out: RawMessage{0x81, 0x00},
+		},
+	}
+
+	for _, tt := range tests {
+		msg, err := DecodeEDN([]byte(tt.in))
+		if err != nil {
+			t.Errorf("DecodeEDN(%q) returned error %v", tt.in, err)
+		}
+		if !bytes.Equal(msg, tt.out) {
+			t.Errorf("DecodeEDN(%q) = \n%s\nwant:\n%s", tt.in, hex.Dump(msg), hex.Dump(tt.out))
+		}
+	}
+}
 
 func TestEncodeEDN(t *testing.T) {
 	tests := []struct {
