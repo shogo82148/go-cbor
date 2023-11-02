@@ -16,6 +16,10 @@ func TestDecodeEDN(t *testing.T) {
 			in:  "0",
 			out: RawMessage{0x00},
 		},
+		{
+			in:  "1",
+			out: RawMessage{0x01},
+		},
 
 		// arrays
 		{
@@ -49,6 +53,52 @@ func TestDecodeEDN(t *testing.T) {
 		{
 			in:  "[_ 0]",
 			out: RawMessage{0x9f, 0x00, 0xff},
+		},
+
+		// RFC 8949 Appendix A.
+		{
+			in:  "0",
+			out: RawMessage{0x00},
+		},
+		{
+			in:  "1",
+			out: RawMessage{0x01},
+		},
+		{
+			in:  "10",
+			out: RawMessage{0x0a},
+		},
+		{
+			in:  "23",
+			out: RawMessage{0x17},
+		},
+		{
+			in:  "24",
+			out: RawMessage{0x18, 0x18},
+		},
+		{
+			in:  "25",
+			out: RawMessage{0x18, 0x19},
+		},
+		{
+			in:  "100",
+			out: RawMessage{0x18, 0x64},
+		},
+		{
+			in:  "1000",
+			out: RawMessage{0x19, 0x03, 0xe8},
+		},
+		{
+			in:  "1000000",
+			out: RawMessage{0x1a, 0x00, 0x0f, 0x42, 0x40},
+		},
+		{
+			in:  "1000000000000",
+			out: RawMessage{0x1b, 0x00, 0x00, 0x00, 0xe8, 0xd4, 0xa5, 0x10, 0x00},
+		},
+		{
+			in:  "18446744073709551615",
+			out: RawMessage{0x1b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 		},
 	}
 
@@ -362,10 +412,6 @@ func TestEncodeEDN(t *testing.T) {
 		{
 			in:  RawMessage{0x1b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			out: `18446744073709551615`,
-		},
-		{
-			in:  RawMessage{0x1b, 0x00, 0x00, 0x00, 0xe8, 0xd4, 0xa5, 0x10, 0x00},
-			out: `1000000000000`,
 		},
 		// TODO: fix this
 		// {

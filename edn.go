@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math"
+	"math/big"
 	"strconv"
 	"unicode/utf8"
 
@@ -177,8 +178,54 @@ func (s *ednDecState) decodeEncodingIndicator() encodingIndicator {
 }
 
 func (s *ednDecState) decodeNumber() {
-	s.buf.WriteByte(0x00)
-	s.off++
+	start := s.off
+LOOP:
+	for ; s.off < len(s.data); s.off++ {
+		switch s.data[s.off] {
+		// decimal numbers
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+
+		// sign
+		case '+', '-':
+
+		// decimal point
+		case '.':
+
+		// hexadecimal numbers
+		case 'a', 'b', 'c', 'd', 'e', 'f', 'A', 'B', 'C', 'D', 'E', 'F':
+
+		// exponent
+		case 'p', 'P':
+
+		default:
+			break LOOP
+		}
+	}
+	end := s.off
+
+	// try to parse as an integer
+	str := string(s.data[start:end])
+	if ok := s.tryToDecodeInteger(str); ok {
+		return
+	}
+}
+
+func (s *ednDecState) tryToDecodeInteger(str string) bool {
+	i, ok := new(big.Int).SetString(str, 0)
+	if !ok {
+		return false
+	}
+
+	if i.Sign() >= 0 {
+		if i.IsUint64() {
+			s.writeUint(majorTypePositiveInt, -1, i.Uint64())
+		} else {
+			// TODO: support big.Int
+			s.err = newSemanticError("cbor: unsupported big.Int")
+			return true
+		}
+	}
+	return true
 }
 
 func (s *ednDecState) decodeArray() {
