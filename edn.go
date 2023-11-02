@@ -146,6 +146,24 @@ func (s *ednDecState) decode() {
 		// integer or float
 		s.decodeNumber()
 
+	case 'N':
+		if bytes.HasPrefix(s.data[s.off:], []byte("NaN")) {
+			s.off += len("NaN")
+			s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
+			s.writeByte(0x7e)
+			s.writeByte(0x00)
+			return
+		}
+
+	case 'I':
+		if bytes.HasPrefix(s.data[s.off:], []byte("Infinity")) {
+			s.off += len("Infinity")
+			s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
+			s.writeByte(0x7c)
+			s.writeByte(0x00)
+			return
+		}
+
 	case 'f':
 		if bytes.HasPrefix(s.data[s.off:], []byte("false")) {
 			s.off += len("false")
@@ -204,6 +222,22 @@ func (s *ednDecState) decodeEncodingIndicator() encodingIndicator {
 }
 
 func (s *ednDecState) decodeNumber() {
+	// special numbers
+	if bytes.HasPrefix(s.data[s.off:], []byte("-Infinity")) {
+		s.off += len("-Infinity")
+		s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
+		s.writeByte(0xfc)
+		s.writeByte(0x00)
+		return
+	}
+	if bytes.HasPrefix(s.data[s.off:], []byte("+Infinity")) {
+		s.off += len("+Infinity")
+		s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
+		s.writeByte(0x7c)
+		s.writeByte(0x00)
+		return
+	}
+
 	start := s.off
 LOOP:
 	for ; s.off < len(s.data); s.off++ {

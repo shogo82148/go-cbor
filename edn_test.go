@@ -30,6 +30,14 @@ func TestDecodeEDN(t *testing.T) {
 			in:  "0.0",
 			out: RawMessage{0xf9, 0x00, 0x00},
 		},
+		{
+			in:  "-Infinity",
+			out: RawMessage{0xf9, 0xfc, 0x00},
+		},
+		{
+			in:  "+Infinity",
+			out: RawMessage{0xf9, 0x7c, 0x00},
+		},
 
 		// arrays
 		{
@@ -218,42 +226,18 @@ func TestDecodeEDN(t *testing.T) {
 			in:  "-4.1",
 			out: RawMessage{0xfb, 0xc0, 0x10, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66},
 		},
-		// {
-		// 	in:  "Infinity",
-		// 	out: RawMessage{0xf9, 0x7c, 0x00},
-		// },
-		// {
-		// 	in:  "NaN",
-		// 	out: RawMessage{0xf9, 0x7e, 0x00},
-		// },
-		// {
-		// 	in:  "-Infinity",
-		// 	out: RawMessage{0xf9, 0xfc, 0x00},
-		// },
-		// {
-		// 	in:  "Infinity",
-		// 	out: RawMessage{0xfa, 0x7f, 0x80, 0x00, 0x00},
-		// },
-		// {
-		// 	in:  "NaN",
-		// 	out: RawMessage{0xfa, 0x7f, 0xc0, 0x00, 0x00},
-		// },
-		// {
-		// 	in:  "-Infinity",
-		// 	out: RawMessage{0xfa, 0xff, 0x80, 0x00, 0x00},
-		// },
-		// {
-		// 	in:  "Infinity",
-		// 	out: RawMessage{0xfb, 0x7f, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00},
-		// },
-		// {
-		// 	in:  "NaN",
-		// 	out: RawMessage{0xfb, 0x7f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00},
-		// },
-		// {
-		// 	in:  "-Infinity",
-		// 	out: RawMessage{0xfb, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00},
-		// },
+		{
+			in:  "Infinity",
+			out: RawMessage{0xf9, 0x7c, 0x00},
+		},
+		{
+			in:  "NaN",
+			out: RawMessage{0xf9, 0x7e, 0x00},
+		},
+		{
+			in:  "-Infinity",
+			out: RawMessage{0xf9, 0xfc, 0x00},
+		},
 		{
 			in:  "false",
 			out: RawMessage{0xf4},
