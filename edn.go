@@ -145,6 +145,32 @@ func (s *ednDecState) decode() {
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '-':
 		// integer or float
 		s.decodeNumber()
+
+	case 'f':
+		if bytes.HasPrefix(s.data[s.off:], []byte("false")) {
+			s.off += len("false")
+			s.writeByte(0xf4) // false
+			return
+		}
+
+	case 't':
+		if bytes.HasPrefix(s.data[s.off:], []byte("true")) {
+			s.off += len("true")
+			s.writeByte(0xf5) // true
+		}
+
+	case 'n':
+		if bytes.HasPrefix(s.data[s.off:], []byte("null")) {
+			s.off += len("null")
+			s.writeByte(0xf6) // null
+		}
+
+	case 'u':
+		if bytes.HasPrefix(s.data[s.off:], []byte("undefined")) {
+			s.off += len("undefined")
+			s.writeByte(0xf7) // undefined
+		}
+
 	case '[':
 		s.decodeArray()
 	}

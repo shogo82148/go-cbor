@@ -254,22 +254,22 @@ func TestDecodeEDN(t *testing.T) {
 		// 	in:  "-Infinity",
 		// 	out: RawMessage{0xfb, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00},
 		// },
-		// {
-		// 	in:  "false",
-		// 	out: RawMessage{0xf4},
-		// },
-		// {
-		// 	in:  "true",
-		// 	out: RawMessage{0xf5},
-		// },
-		// {
-		// 	in:  "null",
-		// 	out: RawMessage{0xf6},
-		// },
-		// {
-		// 	in:  "undefined",
-		// 	out: RawMessage{0xf7},
-		// },
+		{
+			in:  "false",
+			out: RawMessage{0xf4},
+		},
+		{
+			in:  "true",
+			out: RawMessage{0xf5},
+		},
+		{
+			in:  "null",
+			out: RawMessage{0xf6},
+		},
+		{
+			in:  "undefined",
+			out: RawMessage{0xf7},
+		},
 		// {
 		// 	in:  "simple(16)",
 		// 	out: RawMessage{0xf0},
