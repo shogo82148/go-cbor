@@ -211,6 +211,75 @@ LOOP:
 	if s.tryToDecodeInteger(str) {
 		return
 	}
+
+	// try to parse as a float
+	f, err := strconv.ParseFloat(str, 64)
+	if err != nil {
+		s.err = err
+		return
+	}
+
+	// encode to CBOR
+	f64 := math.Float64bits(f)
+	sign := f64 >> 63
+	exp := int((f64>>52)&0x7ff) - 1023
+	frac := f64 & 0xfffffffffffff
+
+	if exp == -1023 && frac == 0 {
+		// 0.0 in float16
+		s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
+		s.writeByte(byte(sign << 7))
+		s.writeByte(0x00)
+		return
+	}
+
+	// try converting to subnormal float16
+	if -24 <= exp && exp < -14 {
+		shift := -exp + 53 - 24 - 1
+		if frac&((1<<shift)-1) == 0 {
+			frac |= 1 << 52
+			f16 := uint16(sign<<15 | frac>>shift)
+			s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
+			s.writeUint16(f16)
+			return
+		}
+	}
+
+	// try converting to normal float16
+	if -14 <= exp && exp <= 15 {
+		if frac&((1<<42)-1) == 0 {
+			f16 := uint16(sign<<15 | uint64(exp+15)<<10 | frac>>42)
+			s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
+			s.writeUint16(f16)
+			return
+		}
+	}
+
+	// try converting to subnormal float32
+	if -149 <= exp && exp < -126 {
+		shift := -exp + 53 - 149 - 1
+		if frac&((1<<shift)-1) == 0 {
+			frac |= 1 << 52
+			f32 := uint32(sign<<31 | frac>>shift)
+			s.writeByte(0xfa) // single-precision float (four-byte IEEE 754)
+			s.writeUint32(f32)
+			return
+		}
+	}
+
+	// try converting to normal float32
+	if -126 <= exp && exp <= 127 {
+		if frac&((1<<29)-1) == 0 {
+			f32 := uint32(sign<<31 | uint64(exp+127)<<23 | frac>>29)
+			s.writeByte(0xfa) // single-precision float (four-byte IEEE 754)
+			s.writeUint32(f32)
+			return
+		}
+	}
+
+	// default to float64
+	s.writeByte(0xfb) // double-precision float (eight-byte IEEE 754)
+	s.writeUint64(f64)
 }
 
 func (s *ednDecState) tryToDecodeInteger(str string) bool {

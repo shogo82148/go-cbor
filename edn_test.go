@@ -25,6 +25,12 @@ func TestDecodeEDN(t *testing.T) {
 			out: RawMessage{0x20},
 		},
 
+		// floats
+		{
+			in:  "0.0",
+			out: RawMessage{0xf9, 0x00, 0x00},
+		},
+
 		// arrays
 		{
 			in:  "[]",
@@ -75,6 +81,18 @@ func TestDecodeEDN(t *testing.T) {
 		{
 			in:  "0b1001001100111",
 			out: RawMessage{0x19, 0x12, 0x67},
+		},
+		{
+			in:  "1.5",
+			out: RawMessage{0xf9, 0x3e, 0x00},
+		},
+		{
+			in:  "0x1.8p0",
+			out: RawMessage{0xf9, 0x3e, 0x00},
+		},
+		{
+			in:  "0x18p-4",
+			out: RawMessage{0xf9, 0x3e, 0x00},
 		},
 
 		// RFC 8949 Appendix A.
