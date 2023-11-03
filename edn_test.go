@@ -3,6 +3,7 @@ package cbor
 import (
 	"bytes"
 	"encoding/hex"
+	"log"
 	"testing"
 )
 
@@ -317,9 +318,147 @@ func TestDecodeEDN(t *testing.T) {
 			in:  `"\ud800\udd51"`,
 			out: RawMessage{0x64, 0xf0, 0x90, 0x85, 0x91},
 		},
+		{
+			in:  `[]`,
+			out: RawMessage{0x80},
+		},
+		{
+			in:  `[1, 2, 3]`,
+			out: RawMessage{0x83, 0x01, 0x02, 0x03},
+		},
+		{
+			in:  `[1, [2, 3], [4, 5]]`,
+			out: RawMessage{0x83, 0x01, 0x82, 0x02, 0x03, 0x82, 0x04, 0x05},
+		},
+		{
+			in: `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]`,
+			out: RawMessage{
+				0x98, 0x19,
+				0x01,
+				0x02,
+				0x03,
+				0x04,
+				0x05,
+				0x06,
+				0x07,
+				0x08,
+				0x09,
+				0x0a,
+				0x0b,
+				0x0c,
+				0x0d,
+				0x0e,
+				0x0f,
+				0x10,
+				0x11,
+				0x12,
+				0x13,
+				0x14,
+				0x15,
+				0x16,
+				0x17,
+				0x18, 0x18,
+				0x18, 0x19,
+			},
+		},
+
+		{
+			in:  `[_ ]`,
+			out: RawMessage{0x9f, 0xff},
+		},
+
+		// TODO: fix this
+		// {
+		// 	in: `[_ 1, [2, 3], [_ 4, 5]]`,
+		// 	out: RawMessage{
+		// 		0x9f,
+		// 		0x01,
+		// 		0x82, 0x02, 0x03,
+		// 		0x9f, 0x04, 0x05, 0xff,
+		// 		0xff,
+		// 	},
+		// },
+		// {
+		// 	in: `[_ 1, [2, 3], [4, 5]]`,
+		// 	out: RawMessage{
+		// 		0x9f,
+		// 		0x01,
+		// 		0x82, 0x02, 0x03,
+		// 		0x82, 0x04, 0x05,
+		// 		0xff,
+		// 	},
+		// },
+		// {
+		// 	in: `[1, [_ 2, 3], [4, 5]]`,
+		// 	out: RawMessage{
+		// 		0x83,
+		// 		0x01,
+		// 		0x9f, 0x02, 0x03, 0xff,
+		// 		0x82, 0x04, 0x05,
+		// 	},
+		// },
+		// {
+		// 	in: `[_ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]`,
+		// 	out: RawMessage{
+		// 		0x9f,
+		// 		0x01,
+		// 		0x02,
+		// 		0x03,
+		// 		0x04,
+		// 		0x05,
+		// 		0x06,
+		// 		0x07,
+		// 		0x08,
+		// 		0x09,
+		// 		0x0a,
+		// 		0x0b,
+		// 		0x0c,
+		// 		0x0d,
+		// 		0x0e,
+		// 		0x0f,
+		// 		0x10,
+		// 		0x11,
+		// 		0x12,
+		// 		0x13,
+		// 		0x14,
+		// 		0x15,
+		// 		0x16,
+		// 		0x17,
+		// 		0x18, 0x18,
+		// 		0x18, 0x19,
+		// 		0xff,
+		// 	},
+		// },
+		// {
+		// 	in: `{_ "a": 1, "b": [_ 2, 3]}`,
+		// 	out: RawMessage{
+		// 		0xbf,
+		// 		0x61, 0x61, 0x01,
+		// 		0x61, 0x62, 0x9f, 0x02, 0x03, 0xff,
+		// 		0xff,
+		// 	},
+		// },
+		// {
+		// 	in: `["a", {_ "b": "c"}]`,
+		// 	out: RawMessage{
+		// 		0x82,
+		// 		0x61, 0x61,
+		// 		0xbf, 0x61, 0x62, 0x61, 0x63, 0xff,
+		// 	},
+		// },
+		// {
+		// 	in: `{_ "Fun": true, "Amt": -2}`,
+		// 	out: RawMessage{
+		// 		0xbf,
+		// 		0x63, 0x46, 0x75, 0x6e, 0xf5,
+		// 		0x63, 0x41, 0x6d, 0x74, 0x21,
+		// 		0xff,
+		// 	},
+		// },
 	}
 
 	for _, tt := range tests {
+		log.Println(tt.in)
 		msg, err := DecodeEDN([]byte(tt.in))
 		if err != nil {
 			t.Errorf("DecodeEDN(%q) returned error %v", tt.in, err)
