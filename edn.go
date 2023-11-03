@@ -189,6 +189,10 @@ func (s *ednDecState) decode() {
 			s.writeByte(0xf7) // undefined
 		}
 
+	case '"':
+		// string
+		s.decodeString()
+
 	case '[':
 		s.decodeArray()
 	}
@@ -367,6 +371,49 @@ func (s *ednDecState) tryToDecodeInteger(str string) bool {
 		}
 	}
 	return true
+}
+
+func (s *ednDecState) decodeString() {
+	ch, err := s.peekByte()
+	if err != nil {
+		s.err = err
+		return
+	}
+	if ch != '"' {
+		s.err = newSemanticError("cbor: invalid string")
+		return
+	}
+	s.off++
+
+	var buf bytes.Buffer
+LOOP:
+	for s.off < len(s.data) {
+		ch, err := s.peekByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		switch ch {
+		default:
+			s.off++
+			buf.WriteByte(ch)
+
+		case '"':
+			// end of string
+			s.off++
+			break LOOP
+
+			// TODO: support escape sequences
+			// case '\\':
+			// 	ch, err := s.readByte()
+			// 	if err != nil {
+			// 		s.err = err
+			// 		return
+		}
+	}
+
+	s.writeUint(majorTypeString, -1, uint64(buf.Len()))
+	buf.WriteTo(&s.buf)
 }
 
 func (s *ednDecState) decodeArray() {
