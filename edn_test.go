@@ -301,6 +301,22 @@ func TestDecodeEDN(t *testing.T) {
 			in:  `"IETF"`,
 			out: RawMessage{0x64, 0x49, 0x45, 0x54, 0x46},
 		},
+		{
+			in:  `"\"\\"`,
+			out: RawMessage{0x62, 0x22, 0x5c},
+		},
+		{
+			in:  `"\u00fc"`,
+			out: RawMessage{0x62, 0xc3, 0xbc},
+		},
+		{
+			in:  `"\u6c34"`,
+			out: RawMessage{0x63, 0xe6, 0xb0, 0xb4},
+		},
+		{
+			in:  `"\ud800\udd51"`,
+			out: RawMessage{0x64, 0xf0, 0x90, 0x85, 0x91},
+		},
 	}
 
 	for _, tt := range tests {

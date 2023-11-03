@@ -40,6 +40,15 @@ func (d *ednDecState) peekByte() (byte, error) {
 	return b, nil
 }
 
+func (s *ednDecState) readRune() (rune, error) {
+	if s.off >= len(s.data) {
+		return 0, ErrUnexpectedEnd
+	}
+	r, size := utf8.DecodeRune(s.data[s.off:])
+	s.off += size
+	return r, nil
+}
+
 func (s *ednDecState) writeByte(v byte) {
 	s.buf.WriteByte(v)
 }
@@ -374,6 +383,7 @@ func (s *ednDecState) tryToDecodeInteger(str string) bool {
 }
 
 func (s *ednDecState) decodeString() {
+	start := s.off
 	ch, err := s.peekByte()
 	if err != nil {
 		s.err = err
@@ -385,35 +395,36 @@ func (s *ednDecState) decodeString() {
 	}
 	s.off++
 
-	var buf bytes.Buffer
 LOOP:
 	for s.off < len(s.data) {
-		ch, err := s.peekByte()
+		ch, err := s.readRune()
 		if err != nil {
 			s.err = err
 			return
 		}
 		switch ch {
-		default:
-			s.off++
-			buf.WriteByte(ch)
-
 		case '"':
 			// end of string
-			s.off++
 			break LOOP
 
-			// TODO: support escape sequences
-			// case '\\':
-			// 	ch, err := s.readByte()
-			// 	if err != nil {
-			// 		s.err = err
-			// 		return
+		case '\\':
+			// escape sequences
+			_, err := s.readRune()
+			if err != nil {
+				s.err = err
+				return
+			}
 		}
 	}
+	end := s.off
 
-	s.writeUint(majorTypeString, -1, uint64(buf.Len()))
-	buf.WriteTo(&s.buf)
+	var str string
+	if err := json.Unmarshal(s.data[start:end], &str); err != nil {
+		s.err = err
+		return
+	}
+	s.writeUint(majorTypeString, -1, uint64(len(str)))
+	s.buf.WriteString(str)
 }
 
 func (s *ednDecState) decodeArray() {
