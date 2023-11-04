@@ -84,6 +84,18 @@ func TestDecodeEDN(t *testing.T) {
 			in:  "+Infinity",
 			out: RawMessage{0xf9, 0x7c, 0x00},
 		},
+		{
+			in:  "1.5_1",
+			out: RawMessage{0xf9, 0x3e, 0x00},
+		},
+		{
+			in:  "1.5_2",
+			out: RawMessage{0xfa, 0x3f, 0xc0, 0x00, 0x00},
+		},
+		{
+			in:  "1.5_3",
+			out: RawMessage{0xfb, 0x3f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
 
 		// byte strings
 		// from RFC 8610 Appendix G.1. and G.6.

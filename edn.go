@@ -358,7 +358,41 @@ LOOP:
 		return
 	}
 
-	// try to parse as a float
+	if ind == 1 {
+		// float16
+		f, err := float16.Parse(str)
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.writeByte(0xf9) // half-precision float (two-byte IEEE 754)
+		s.writeUint16(f.Bits())
+		return
+	}
+	if ind == 2 {
+		// float32
+		f, err := strconv.ParseFloat(str, 32)
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.writeByte(0xfa) // single-precision float (four-byte IEEE 754)
+		s.writeUint32(math.Float32bits(float32(f)))
+		return
+	}
+	if ind == 3 {
+		// float64
+		f, err := strconv.ParseFloat(str, 64)
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.writeByte(0xfb) // double-precision float (eight-byte IEEE 754)
+		s.writeUint64(math.Float64bits(f))
+		return
+	}
+
+	// find smallest representation
 	f, err := strconv.ParseFloat(str, 64)
 	if err != nil {
 		s.err = err
@@ -426,6 +460,7 @@ LOOP:
 	// default to float64
 	s.writeByte(0xfb) // double-precision float (eight-byte IEEE 754)
 	s.writeUint64(f64)
+	return
 }
 
 func (s *ednDecState) tryToDecodeInteger(str string, ind encodingIndicator) bool {
