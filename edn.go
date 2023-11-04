@@ -149,12 +149,10 @@ func (d *ednDecState) skipWhitespace() {
 func (d *ednDecState) expectWhitespace() {
 	ch, err := d.peekByte()
 	if err != nil {
-		d.err = err
 		return
 	}
 	switch ch {
-	case ' ', '\t', '\r', '\n':
-		d.off++
+	case ' ', '\t', '\r', '\n', '/':
 	default:
 		d.err = newSemanticError("cbor: expected whitespace")
 		return
@@ -254,7 +252,6 @@ func (s *ednDecState) decode() {
 func (s *ednDecState) decodeEncodingIndicator() encodingIndicator {
 	ch, err := s.peekByte()
 	if err != nil {
-		s.err = err
 		return -1
 	}
 	if ch != '_' {
@@ -264,8 +261,7 @@ func (s *ednDecState) decodeEncodingIndicator() encodingIndicator {
 
 	ch, err = s.peekByte()
 	if err != nil {
-		s.err = err
-		return -1
+		return 7
 	}
 	switch ch {
 	case '0', '1', '2', '3', '4', '5', '6', '7':
@@ -323,6 +319,7 @@ LOOP:
 	}
 	end := s.off
 
+	var ind encodingIndicator = -1
 	if s.off < len(s.data) {
 		if s.data[s.off] == '(' {
 			// tag
@@ -350,12 +347,14 @@ LOOP:
 				return
 			}
 			return
+		} else if s.data[s.off] == '_' {
+			ind = s.decodeEncodingIndicator()
 		}
 	}
 
 	// try to parse as an integer
 	str := string(s.data[start:end])
-	if s.tryToDecodeInteger(str) {
+	if s.tryToDecodeInteger(str, ind) {
 		return
 	}
 
@@ -429,15 +428,19 @@ LOOP:
 	s.writeUint64(f64)
 }
 
-func (s *ednDecState) tryToDecodeInteger(str string) bool {
+func (s *ednDecState) tryToDecodeInteger(str string, ind encodingIndicator) bool {
 	i, ok := new(big.Int).SetString(str, 0)
 	if !ok {
 		return false
 	}
+	if ind > 3 {
+		// encoding indicator 4 is not defined. just ignore it.
+		ind = -1
+	}
 
 	if i.Sign() >= 0 {
 		if i.IsUint64() {
-			s.writeUint(majorTypePositiveInt, -1, i.Uint64())
+			s.writeUint(majorTypePositiveInt, ind, i.Uint64())
 		} else {
 			// TODO: support big.Int
 			s.err = newSemanticError("cbor: unsupported big.Int")
@@ -446,7 +449,7 @@ func (s *ednDecState) tryToDecodeInteger(str string) bool {
 	} else {
 		i.Not(i)
 		if i.IsUint64() {
-			s.writeUint(majorTypeNegativeInt, -1, i.Uint64())
+			s.writeUint(majorTypeNegativeInt, ind, i.Uint64())
 		} else {
 			// TODO: support big.Int
 			s.err = newSemanticError("cbor: unsupported big.Int")

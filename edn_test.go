@@ -21,9 +21,53 @@ func TestDecodeEDN(t *testing.T) {
 			out: RawMessage{0x01},
 		},
 
+		// positive integers with encoding indicator
+		{
+			in:  "0_0",
+			out: RawMessage{0x18, 0x00},
+		},
+		{
+			in:  "0_1",
+			out: RawMessage{0x19, 0x00, 0x00},
+		},
+		{
+			in:  "0_2",
+			out: RawMessage{0x1a, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			in:  "0_3",
+			out: RawMessage{0x1b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			in:  "0_4", // encoding indicator 4 is not defined. just ignore it.
+			out: RawMessage{0x00},
+		},
+
 		// negative integers
 		{
 			in:  "-1",
+			out: RawMessage{0x20},
+		},
+
+		// negative integers with encoding indicator
+		{
+			in:  "-1_0",
+			out: RawMessage{0x38, 0x00},
+		},
+		{
+			in:  "-1_1",
+			out: RawMessage{0x39, 0x00, 0x00},
+		},
+		{
+			in:  "-1_2",
+			out: RawMessage{0x3a, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			in:  "-1_3",
+			out: RawMessage{0x3b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		},
+		{
+			in:  "-1_4", // encoding indicator 4 is not defined. just ignore it.
 			out: RawMessage{0x20},
 		},
 
