@@ -486,18 +486,20 @@ func (s *ednDecState) tryToDecodeInteger(str string, ind encodingIndicator) bool
 		if i.IsUint64() {
 			s.writeUint(majorTypePositiveInt, ind, i.Uint64())
 		} else {
-			// TODO: support big.Int
-			s.err = newSemanticError("cbor: unsupported big.Int")
-			return true
+			s.writeByte(0xc2) // tag 2 (positive bignum)
+			data := i.Bytes()
+			s.writeUint(majorTypeBytes, -1, uint64(len(data)))
+			s.buf.Write(data)
 		}
 	} else {
 		i.Not(i)
 		if i.IsUint64() {
 			s.writeUint(majorTypeNegativeInt, ind, i.Uint64())
 		} else {
-			// TODO: support big.Int
-			s.err = newSemanticError("cbor: unsupported big.Int")
-			return true
+			s.writeByte(0xc3) // tag 3 (negative bignum)
+			data := i.Bytes()
+			s.writeUint(majorTypeBytes, -1, uint64(len(data)))
+			s.buf.Write(data)
 		}
 	}
 	return true
