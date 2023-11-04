@@ -240,6 +240,10 @@ func (s *ednDecState) decode() {
 	// array
 	case '[':
 		s.convertArray()
+
+	// map
+	case '{':
+		s.convertMap()
 	}
 }
 
@@ -613,6 +617,7 @@ func (s *ednDecState) convertArray() {
 	if ind == 7 {
 		// indefinite length array
 		s.buf.WriteByte(0x9f)
+		first := true
 		for {
 			s.skipWhitespace()
 			if s.err != nil {
@@ -627,6 +632,15 @@ func (s *ednDecState) convertArray() {
 				// end of array
 				s.off++
 				break
+			}
+			if !first {
+				if ch == ',' {
+					s.off++
+				} else {
+					s.err = newSemanticError("cbor: expected comma")
+					return
+				}
+				first = false
 			}
 			s.decode()
 			if s.err != nil {
@@ -674,6 +688,139 @@ func (s *ednDecState) convertArray() {
 	}
 	s.off = t.off
 	s.writeUint(majorTypeArray, ind, count)
+	t.buf.WriteTo(&s.buf)
+}
+
+func (s *ednDecState) convertMap() {
+	ch, err := s.peekByte()
+	if err != nil {
+		s.err = err
+		return
+	}
+	if ch != '{' {
+		s.err = newSemanticError("cbor: invalid map")
+		return
+	}
+	s.off++
+
+	ind := s.decodeEncodingIndicator()
+	if s.err != nil {
+		return
+	}
+
+	if ind == 7 {
+		// indefinite length map
+		s.buf.WriteByte(0xbf)
+		first := true
+		for {
+			s.skipWhitespace()
+			if s.err != nil {
+				return
+			}
+			ch, err := s.peekByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if ch == '}' {
+				// end of map
+				s.off++
+				break
+			}
+			if !first {
+				if ch == ',' {
+					s.off++
+				} else {
+					s.err = newSemanticError("cbor: expected comma")
+					return
+				}
+				first = false
+			}
+
+			// decode the key
+			s.decode()
+			s.skipWhitespace()
+			if s.err != nil {
+				return
+			}
+			ch, err = s.peekByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if ch != ':' {
+				s.err = newSemanticError("cbor: expected colon")
+				return
+			}
+			s.off++
+			s.skipWhitespace()
+
+			// decode the value
+			s.decode()
+			if s.err != nil {
+				return
+			}
+		}
+		s.buf.WriteByte(0xff)
+		return
+	}
+
+	t := &ednDecState{data: s.data, off: s.off}
+	var count uint64
+	for {
+		t.skipWhitespace()
+		if t.err != nil {
+			s.err = t.err
+			return
+		}
+		ch, err := t.peekByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if ch == '}' {
+			// end of map
+			t.off++
+			break
+		}
+		if count > 0 {
+			if ch == ',' {
+				t.off++
+			} else {
+				s.err = newSemanticError("cbor: expected comma")
+				return
+			}
+		}
+
+		// decode the key
+		count++
+		t.decode()
+		t.skipWhitespace()
+		if t.err != nil {
+			s.err = t.err
+			return
+		}
+		ch, err = t.peekByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if ch != ':' {
+			s.err = newSemanticError("cbor: expected colon")
+			return
+		}
+		t.off++
+		t.skipWhitespace()
+
+		// decode the value
+		t.decode()
+		if t.err != nil {
+			s.err = t.err
+			return
+		}
+	}
+	s.off = t.off
+	s.writeUint(majorTypeMap, ind, count)
 	t.buf.WriteTo(&s.buf)
 }
 
