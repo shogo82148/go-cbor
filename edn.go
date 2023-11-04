@@ -121,7 +121,6 @@ func (d *ednDecState) skipWhitespace() {
 	for {
 		ch, err := d.peekByte()
 		if err != nil {
-			d.err = err
 			return
 		}
 		switch ch {
@@ -228,6 +227,10 @@ func (s *ednDecState) decode() {
 
 	// byte string (base64url format)
 	case 'b':
+		s.convertBytes()
+
+	// byte string (raw format)
+	case '\'':
 		s.convertBytes()
 
 	// text string
@@ -416,144 +419,178 @@ func (s *ednDecState) tryToDecodeInteger(str string) bool {
 }
 
 func (s *ednDecState) convertBytes() {
+	buf := []byte{}
+	for {
+		var ok bool
+		buf, ok = s.decodeString(buf)
+		if !ok {
+			break
+		}
+		s.skipWhitespace()
+	}
+	if s.err != nil {
+		return
+	}
+
+	s.writeUint(majorTypeBytes, -1, uint64(len(buf)))
+	s.buf.Write(buf)
+}
+
+func (s *ednDecState) convertString() {
+	buf := []byte{}
+	for {
+		var ok bool
+		buf, ok = s.decodeString(buf)
+		if !ok {
+			break
+		}
+		s.skipWhitespace()
+	}
+	if s.err != nil {
+		return
+	}
+
+	s.writeUint(majorTypeString, -1, uint64(len(buf)))
+	s.buf.Write(buf)
+}
+
+// decodeString decodes the byte or text string and return buf.
+func (s *ednDecState) decodeString(buf []byte) ([]byte, bool) {
 	// hexadecimal format
 	if bytes.HasPrefix(s.data[s.off:], []byte("h'")) {
 		s.off += len("h'")
-		var buf bytes.Buffer
+		var tmp bytes.Buffer
 		for {
 			s.skipWhitespace()
 			if s.err != nil {
-				return
+				return buf, false
 			}
 			ch, err := s.readByte()
 			if err != nil {
 				s.err = err
-				return
+				return buf, false
 			}
 			if ch == '\'' {
 				// end of byte string
 				break
 			}
-			buf.WriteByte(ch)
+			tmp.WriteByte(ch)
 		}
-		data, err := hex.DecodeString(buf.String())
+		data, err := hex.DecodeString(tmp.String())
 		if err != nil {
 			s.err = err
-			return
+			return buf, false
 		}
-		s.writeUint(majorTypeBytes, -1, uint64(len(data)))
-		s.buf.Write(data)
-		return
+		return append(buf, data...), true
 	}
 
 	// base32hex format
 	if bytes.HasPrefix(s.data[s.off:], []byte("h32'")) {
 		s.off += len("h32'")
-		var buf bytes.Buffer
+		var tmp bytes.Buffer
 		for {
 			s.skipWhitespace()
 			if s.err != nil {
-				return
+				return buf, false
 			}
 			ch, err := s.readByte()
 			if err != nil {
 				s.err = err
-				return
+				return buf, false
 			}
 			if ch == '\'' {
 				// end of byte string
 				break
 			}
-			buf.WriteByte(ch)
+			tmp.WriteByte(ch)
 		}
 		h32 := base32.StdEncoding.WithPadding(base32.NoPadding)
-		data, err := h32.DecodeString(buf.String())
+		data, err := h32.DecodeString(tmp.String())
 		if err != nil {
 			s.err = err
-			return
+			return buf, false
 		}
-		s.writeUint(majorTypeBytes, -1, uint64(len(data)))
-		s.buf.Write(data)
-		return
+		return append(buf, data...), true
 	}
 
 	// base64url format
 	if bytes.HasPrefix(s.data[s.off:], []byte("b64'")) {
 		s.off += len("b64'")
-		var buf bytes.Buffer
+		var tmp bytes.Buffer
 		for {
 			s.skipWhitespace()
 			if s.err != nil {
-				return
+				return buf, false
 			}
 			ch, err := s.readByte()
 			if err != nil {
 				s.err = err
-				return
+				return buf, false
 			}
 			if ch == '\'' {
 				// end of byte string
 				break
 			}
-			buf.WriteByte(ch)
+			tmp.WriteByte(ch)
 		}
 		b64 := base64.URLEncoding.WithPadding(base64.NoPadding)
-		data, err := b64.DecodeString(buf.String())
+		data, err := b64.DecodeString(tmp.String())
 		if err != nil {
 			s.err = err
-			return
+			return buf, false
 		}
-		s.writeUint(majorTypeBytes, -1, uint64(len(data)))
-		s.buf.Write(data)
-		return
+		return append(buf, data...), true
 	}
 
-	s.err = newSemanticError("cbor: invalid byte string")
-}
-
-func (s *ednDecState) convertString() {
-	start := s.off
-	ch, err := s.peekByte()
-	if err != nil {
-		s.err = err
-		return
-	}
-	if ch != '"' {
-		s.err = newSemanticError("cbor: invalid string")
-		return
-	}
-	s.off++
-
-LOOP:
-	for s.off < len(s.data) {
-		ch, err := s.readRune()
-		if err != nil {
-			s.err = err
-			return
+	// raw string
+	if bytes.HasPrefix(s.data[s.off:], []byte("'")) {
+		s.off += len("'")
+		idx := bytes.IndexByte(s.data[s.off:], '\'')
+		if idx < 0 {
+			s.err = newSemanticError("cbor: invalid string")
+			return buf, false
 		}
-		switch ch {
-		case '"':
-			// end of string
-			break LOOP
+		data := s.data[s.off : s.off+idx]
+		s.off += idx + 1
+		return append(buf, data...), true
+	}
 
-		case '\\':
-			// escape sequences
-			_, err := s.readRune()
+	// JSON formatted string
+	if bytes.HasPrefix(s.data[s.off:], []byte(`"`)) {
+		start := s.off
+		s.off++ // skip '"'
+	LOOP:
+		for s.off < len(s.data) {
+			ch, err := s.readRune()
 			if err != nil {
 				s.err = err
-				return
+				return buf, false
+			}
+			switch ch {
+			case '"':
+				// end of string
+				break LOOP
+
+			case '\\':
+				// escape sequences
+				_, err := s.readRune()
+				if err != nil {
+					s.err = err
+					return buf, false
+				}
 			}
 		}
-	}
-	end := s.off
+		end := s.off
 
-	var str string
-	if err := json.Unmarshal(s.data[start:end], &str); err != nil {
-		s.err = err
-		return
+		var str string
+		if err := json.Unmarshal(s.data[start:end], &str); err != nil {
+			s.err = err
+			return buf, false
+		}
+		return append(buf, str...), true
 	}
-	s.writeUint(majorTypeString, -1, uint64(len(str)))
-	s.buf.WriteString(str)
+
+	return buf, false
 }
 
 func (s *ednDecState) convertArray() {
