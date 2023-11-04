@@ -244,6 +244,10 @@ func (s *ednDecState) decode() {
 	// map
 	case '{':
 		s.convertMap()
+
+	// simple value
+	case 's':
+		s.convertSimple()
 	}
 }
 
@@ -822,6 +826,24 @@ func (s *ednDecState) convertMap() {
 	s.off = t.off
 	s.writeUint(majorTypeMap, ind, count)
 	t.buf.WriteTo(&s.buf)
+}
+
+func (s *ednDecState) convertSimple() {
+	if bytes.HasPrefix(s.data[s.off:], []byte("simple(")) {
+		s.off += len("simple(")
+		idx := bytes.IndexByte(s.data[s.off:], ')')
+		if idx < 0 {
+			s.err = newSemanticError("cbor: invalid simple value")
+			return
+		}
+		var v uint64
+		v, s.err = strconv.ParseUint(string(s.data[s.off:s.off+idx]), 10, 64)
+		s.off += idx + 1
+		s.writeUint(majorTypeOther, -1, v)
+		return
+	}
+
+	s.err = newSemanticError("cbor: invalid simple value")
 }
 
 // EncodeEDN returns the Extended Diagnostic Notation encoding of msg.

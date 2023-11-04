@@ -345,14 +345,14 @@ func TestDecodeEDN(t *testing.T) {
 			in:  "undefined",
 			out: RawMessage{0xf7},
 		},
-		// {
-		// 	in:  "simple(16)",
-		// 	out: RawMessage{0xf0},
-		// },
-		// {
-		// 	in:  "simple(255)",
-		// 	out: RawMessage{0xf8, 0xff},
-		// },
+		{
+			in:  "simple(16)",
+			out: RawMessage{0xf0},
+		},
+		{
+			in:  "simple(255)",
+			out: RawMessage{0xf8, 0xff},
+		},
 		// {
 		// 	in:  "0(\"2013-03-21T20:04:00Z\")",
 		// 	out: RawMessage{0xc0, 0x74, 0x32, 0x30, 0x31, 0x33, 0x2d, 0x30, 0x33, 0x2d, 0x32, 0x31, 0x54, 0x32, 0x30, 0x3a, 0x30, 0x34, 0x3a, 0x30, 0x30, 0x5a},
