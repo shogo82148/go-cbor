@@ -224,19 +224,19 @@ func (s *ednDecState) decode() {
 
 	// byte string (hexadecimal format)
 	case 'h':
-		s.decodeBytes()
+		s.convertBytes()
 
 	// byte string (base64url format)
 	case 'b':
-		s.decodeBytes()
+		s.convertBytes()
 
 	// text string
 	case '"':
-		s.decodeString()
+		s.convertString()
 
 	// array
 	case '[':
-		s.decodeArray()
+		s.convertArray()
 	}
 }
 
@@ -415,7 +415,7 @@ func (s *ednDecState) tryToDecodeInteger(str string) bool {
 	return true
 }
 
-func (s *ednDecState) decodeBytes() {
+func (s *ednDecState) convertBytes() {
 	// hexadecimal format
 	if bytes.HasPrefix(s.data[s.off:], []byte("h'")) {
 		s.off += len("h'")
@@ -511,7 +511,7 @@ func (s *ednDecState) decodeBytes() {
 	s.err = newSemanticError("cbor: invalid byte string")
 }
 
-func (s *ednDecState) decodeString() {
+func (s *ednDecState) convertString() {
 	start := s.off
 	ch, err := s.peekByte()
 	if err != nil {
@@ -556,7 +556,7 @@ LOOP:
 	s.buf.WriteString(str)
 }
 
-func (s *ednDecState) decodeArray() {
+func (s *ednDecState) convertArray() {
 	ch, err := s.peekByte()
 	if err != nil {
 		s.err = err
