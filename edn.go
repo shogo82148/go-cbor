@@ -2,6 +2,8 @@ package cbor
 
 import (
 	"bytes"
+	"encoding/base32"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -224,6 +226,10 @@ func (s *ednDecState) decode() {
 	case 'h':
 		s.decodeBytes()
 
+	// byte string (base64url format)
+	case 'b':
+		s.decodeBytes()
+
 	// text string
 	case '"':
 		s.decodeString()
@@ -410,8 +416,8 @@ func (s *ednDecState) tryToDecodeInteger(str string) bool {
 }
 
 func (s *ednDecState) decodeBytes() {
+	// hexadecimal format
 	if bytes.HasPrefix(s.data[s.off:], []byte("h'")) {
-		// hexadecimal format
 		s.off += len("h'")
 		var buf bytes.Buffer
 		for {
@@ -431,6 +437,68 @@ func (s *ednDecState) decodeBytes() {
 			buf.WriteByte(ch)
 		}
 		data, err := hex.DecodeString(buf.String())
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.writeUint(majorTypeBytes, -1, uint64(len(data)))
+		s.buf.Write(data)
+		return
+	}
+
+	// base32hex format
+	if bytes.HasPrefix(s.data[s.off:], []byte("h32'")) {
+		s.off += len("h32'")
+		var buf bytes.Buffer
+		for {
+			s.skipWhitespace()
+			if s.err != nil {
+				return
+			}
+			ch, err := s.readByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if ch == '\'' {
+				// end of byte string
+				break
+			}
+			buf.WriteByte(ch)
+		}
+		h32 := base32.StdEncoding.WithPadding(base32.NoPadding)
+		data, err := h32.DecodeString(buf.String())
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.writeUint(majorTypeBytes, -1, uint64(len(data)))
+		s.buf.Write(data)
+		return
+	}
+
+	// base64url format
+	if bytes.HasPrefix(s.data[s.off:], []byte("b64'")) {
+		s.off += len("b64'")
+		var buf bytes.Buffer
+		for {
+			s.skipWhitespace()
+			if s.err != nil {
+				return
+			}
+			ch, err := s.readByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if ch == '\'' {
+				// end of byte string
+				break
+			}
+			buf.WriteByte(ch)
+		}
+		b64 := base64.URLEncoding.WithPadding(base64.NoPadding)
+		data, err := b64.DecodeString(buf.String())
 		if err != nil {
 			s.err = err
 			return

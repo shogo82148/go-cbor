@@ -41,6 +41,7 @@ func TestDecodeEDN(t *testing.T) {
 		},
 
 		// byte strings
+		// from RFC 8610 Appendix G.1. and G.6.
 		{
 			in:  "h'48656c6c6f20776f726c64'",
 			out: RawMessage{0x4b, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64},
@@ -62,6 +63,20 @@ func TestDecodeEDN(t *testing.T) {
 				"20 /space/\n" +
 				"77 6f 72 6c 64' /world/",
 			out: RawMessage{0x4b, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64},
+		},
+
+		// from RFC 8949 Section 8.
+		{
+			in:  "h'12345678'",
+			out: RawMessage{0x44, 0x12, 0x34, 0x56, 0x78},
+		},
+		{
+			in:  "h32'CI2FM6A'",
+			out: RawMessage{0x44, 0x12, 0x34, 0x56, 0x78},
+		},
+		{
+			in:  "b64'EjRWeA'",
+			out: RawMessage{0x44, 0x12, 0x34, 0x56, 0x78},
 		},
 
 		// text strings
@@ -104,7 +119,7 @@ func TestDecodeEDN(t *testing.T) {
 			out: RawMessage{0x9f, 0x00, 0xff},
 		},
 
-		// Example from RFC 8610 Appendix G.
+		// numbers from RFC 8610 Appendix G.5.
 		{
 			in:  "4711",
 			out: RawMessage{0x19, 0x12, 0x67},
