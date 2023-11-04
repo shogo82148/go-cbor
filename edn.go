@@ -1566,8 +1566,16 @@ func (s *ednEncState) encode() {
 		}
 		s.buf.WriteByte('}')
 
+	// positive big int
+	case 0xc2:
+		s.convertBigInt(1)
+
+	// negative big int
+	case 0xc3:
+		s.convertBigInt(-1)
+
 	// tags
-	case 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
+	case 0xc0, 0xc1, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
 		s.convertTag(uint64(typ & 0x1f))
 
 	// 1 byte tag
@@ -1786,4 +1794,54 @@ func (s *ednEncState) convertFloat(v float64) {
 		str = strconv.FormatFloat(v, 'f', 1, 64)
 	}
 	s.buf.WriteString(str)
+}
+
+func (s *ednEncState) convertBigInt(sign int) {
+	i := new(big.Int)
+
+	tye, err := s.readByte()
+	if err != nil {
+		s.err = err
+		return
+	}
+
+	switch tye {
+	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
+		n := int(tye & 0x1f)
+		i.SetBytes(s.data[s.off : s.off+n])
+		s.off += n
+	case 0x58:
+		n, err := s.readByte()
+		if err != nil {
+			s.err = err
+		}
+		i.SetBytes(s.data[s.off : s.off+int(n)])
+		s.off += int(n)
+	case 0x59:
+		n, err := s.readUint16()
+		if err != nil {
+			s.err = err
+		}
+		i.SetBytes(s.data[s.off : s.off+int(n)])
+		s.off += int(n)
+	case 0x5a:
+		n, err := s.readUint32()
+		if err != nil {
+			s.err = err
+		}
+		i.SetBytes(s.data[s.off : s.off+int(n)])
+		s.off += int(n)
+	case 0x5b:
+		n, err := s.readUint64()
+		if err != nil {
+			s.err = err
+		}
+		i.SetBytes(s.data[s.off : s.off+int(n)])
+	}
+
+	if sign < 0 {
+		i.Not(i)
+	}
+
+	s.buf.WriteString(i.String())
 }
