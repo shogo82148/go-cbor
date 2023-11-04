@@ -98,6 +98,31 @@ func TestDecodeEDN(t *testing.T) {
 		},
 
 		// byte strings
+		{
+			in:  "h'01'_0",
+			out: RawMessage{0x58, 0x01, 0x01},
+		},
+		{
+			in:  "h'01'_1",
+			out: RawMessage{0x59, 0x00, 0x01, 0x01},
+		},
+		{
+			in:  "h'01'_2",
+			out: RawMessage{0x5a, 0x00, 0x00, 0x00, 0x01, 0x01},
+		},
+		{
+			in:  "h'01'_3",
+			out: RawMessage{0x5b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01},
+		},
+		{
+			in:  "h'01'_",
+			out: RawMessage{0x5f, 0x41, 0x01, 0xff},
+		},
+		{
+			in:  "h''_",
+			out: RawMessage{0x5f, 0xff},
+		},
+
 		// from RFC 8610 Appendix G.1. and G.6.
 		{
 			in:  "h'48656c6c6f20776f726c64'",
@@ -166,6 +191,18 @@ func TestDecodeEDN(t *testing.T) {
 		{
 			in:  `""`,
 			out: RawMessage{0x60},
+		},
+		{
+			in:  `"a"_0`,
+			out: RawMessage{0x78, 0x01, 0x61},
+		},
+		{
+			in:  `"a"_1`,
+			out: RawMessage{0x79, 0x00, 0x01, 0x61},
+		},
+		{
+			in:  `"a"_2`,
+			out: RawMessage{0x7a, 0x00, 0x00, 0x00, 0x01, 0x61},
 		},
 
 		// from RFC 8610 Appendix G.4
@@ -535,24 +572,24 @@ func TestDecodeEDN(t *testing.T) {
 				0x61, 0x65, 0x61, 0x45,
 			},
 		},
-		// {
-		// 	in: `(_ h'0102', h'030405')`,
-		// 	out: RawMessage{
-		// 		0x5f,
-		// 		0x42, 0x01, 0x02,
-		// 		0x43, 0x03, 0x04, 0x05,
-		// 		0xff,
-		// 	},
-		// },
-		// {
-		// 	in: `(_ "strea", "ming")`,
-		// 	out: RawMessage{
-		// 		0x7f,
-		// 		0x65, 0x73, 0x74, 0x72, 0x65, 0x61,
-		// 		0x64, 0x6d, 0x69, 0x6e, 0x67,
-		// 		0xff,
-		// 	},
-		// },
+		{
+			in: `(_ h'0102', h'030405')`,
+			out: RawMessage{
+				0x5f,
+				0x42, 0x01, 0x02,
+				0x43, 0x03, 0x04, 0x05,
+				0xff,
+			},
+		},
+		{
+			in: `(_ "strea", "ming")`,
+			out: RawMessage{
+				0x7f,
+				0x65, 0x73, 0x74, 0x72, 0x65, 0x61,
+				0x64, 0x6d, 0x69, 0x6e, 0x67,
+				0xff,
+			},
+		},
 		{
 			in:  `[_ ]`,
 			out: RawMessage{0x9f, 0xff},

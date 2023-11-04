@@ -243,9 +243,16 @@ func (s *ednDecState) decode() {
 	case '{':
 		s.convertMap()
 
+	// indefinite length strings
+	case '(':
+		s.convertIndefiniteString()
+
 	// simple value
 	case 's':
 		s.convertSimple()
+
+	default:
+		s.err = newSemanticError("cbor: invalid token")
 	}
 }
 
@@ -460,7 +467,6 @@ LOOP:
 	// default to float64
 	s.writeByte(0xfb) // double-precision float (eight-byte IEEE 754)
 	s.writeUint64(f64)
-	return
 }
 
 func (s *ednDecState) tryToDecodeInteger(str string, ind encodingIndicator) bool {
@@ -496,37 +502,77 @@ func (s *ednDecState) tryToDecodeInteger(str string, ind encodingIndicator) bool
 
 func (s *ednDecState) convertBytes() {
 	buf := []byte{}
+	var ind encodingIndicator = -1
 	for {
 		var ok bool
 		buf, ok = s.decodeString(buf)
 		if !ok {
 			break
 		}
+		ind = s.decodeEncodingIndicator()
 		s.skipWhitespace()
 	}
 	if s.err != nil {
 		return
 	}
 
-	s.writeUint(majorTypeBytes, -1, uint64(len(buf)))
+	if ind == 7 {
+		if len(buf) == 0 {
+			// indefinite length byte string that has no chunks
+			s.writeByte(0x5f)
+			s.writeByte(0xff)
+		} else {
+			s.writeByte(0x5f)
+			s.writeUint(majorTypeBytes, -1, uint64(len(buf)))
+			s.buf.Write(buf)
+			s.writeByte(0xff)
+		}
+		return
+	}
+
+	if ind > 3 {
+		// encoding indicator 4, 5 and 6 are not defined. just ignore it.
+		ind = -1
+	}
+	s.writeUint(majorTypeBytes, ind, uint64(len(buf)))
 	s.buf.Write(buf)
 }
 
 func (s *ednDecState) convertString() {
 	buf := []byte{}
+	var ind encodingIndicator = -1
 	for {
 		var ok bool
 		buf, ok = s.decodeString(buf)
 		if !ok {
 			break
 		}
+		ind = s.decodeEncodingIndicator()
 		s.skipWhitespace()
 	}
 	if s.err != nil {
 		return
 	}
 
-	s.writeUint(majorTypeString, -1, uint64(len(buf)))
+	if ind == 7 {
+		if len(buf) == 0 {
+			// indefinite length byte string that has no chunks
+			s.writeByte(0x7f)
+			s.writeByte(0xff)
+		} else {
+			s.writeByte(0x7f)
+			s.writeUint(majorTypeBytes, -1, uint64(len(buf)))
+			s.buf.Write(buf)
+			s.writeByte(0xff)
+		}
+		return
+	}
+
+	if ind > 3 {
+		// encoding indicator 4, 5 and 6 are not defined. just ignore it.
+		ind = -1
+	}
+	s.writeUint(majorTypeString, ind, uint64(len(buf)))
 	s.buf.Write(buf)
 }
 
@@ -667,6 +713,70 @@ func (s *ednDecState) decodeString(buf []byte) ([]byte, bool) {
 	}
 
 	return buf, false
+}
+
+func (s *ednDecState) convertIndefiniteString() {
+	ch, err := s.peekByte()
+	if err != nil {
+		s.err = err
+		return
+	}
+	if ch != '(' {
+		s.err = newSemanticError("cbor: invalid indefinite length string")
+		return
+	}
+	s.off++
+	if s.decodeEncodingIndicator() != 7 {
+		s.err = newSemanticError("cbor: invalid indefinite length string")
+		return
+	}
+
+	first := true
+	isText := false
+	for {
+		s.skipWhitespace()
+		if s.err != nil {
+			return
+		}
+		ch, err := s.peekByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if ch == ')' {
+			// end of string
+			s.off++
+			break
+		}
+
+		if first {
+			isText = ch == '"'
+			if isText {
+				s.writeByte(0x7f)
+			} else {
+				s.writeByte(0x5f)
+			}
+		} else {
+			if ch == ',' {
+				s.off++
+			} else {
+				s.err = newSemanticError("cbor: expected comma")
+				return
+			}
+		}
+		first = false
+
+		s.skipWhitespace()
+		if isText {
+			s.convertString()
+		} else {
+			s.convertBytes()
+		}
+		if s.err != nil {
+			return
+		}
+	}
+	s.writeByte(0xff)
 }
 
 func (s *ednDecState) convertArray() {
