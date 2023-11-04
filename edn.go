@@ -32,6 +32,15 @@ type ednDecState struct {
 	err  error
 }
 
+func (d *ednDecState) readByte() (byte, error) {
+	if d.off >= len(d.data) {
+		return 0, ErrUnexpectedEnd
+	}
+	b := d.data[d.off]
+	d.off++
+	return b, nil
+}
+
 func (d *ednDecState) peekByte() (byte, error) {
 	if d.off >= len(d.data) {
 		return 0, ErrUnexpectedEnd
@@ -198,10 +207,15 @@ func (s *ednDecState) decode() {
 			s.writeByte(0xf7) // undefined
 		}
 
+	// byte string (hexadecimal format)
+	case 'h':
+		s.decodeBytes()
+
+	// text string
 	case '"':
-		// string
 		s.decodeString()
 
+	// array
 	case '[':
 		s.decodeArray()
 	}
@@ -380,6 +394,40 @@ func (s *ednDecState) tryToDecodeInteger(str string) bool {
 		}
 	}
 	return true
+}
+
+func (s *ednDecState) decodeBytes() {
+	if bytes.HasPrefix(s.data[s.off:], []byte("h'")) {
+		// hexadecimal format
+		s.off += len("h'")
+		var buf bytes.Buffer
+		for {
+			s.skipWhitespace()
+			if s.err != nil {
+				return
+			}
+			ch, err := s.readByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if ch == '\'' {
+				// end of byte string
+				break
+			}
+			buf.WriteByte(ch)
+		}
+		data, err := hex.DecodeString(buf.String())
+		if err != nil {
+			s.err = err
+			return
+		}
+		s.writeUint(majorTypeBytes, -1, uint64(len(data)))
+		s.buf.Write(data)
+		return
+	}
+
+	s.err = newSemanticError("cbor: invalid byte string")
 }
 
 func (s *ednDecState) decodeString() {
