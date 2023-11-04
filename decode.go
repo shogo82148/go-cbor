@@ -7,12 +7,13 @@ import (
 	"io"
 	"math"
 	"math/big"
-	"math/bits"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/shogo82148/float16"
 )
 
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
@@ -413,9 +414,9 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 		}
 		return d.decodeNegativeInt(start, w, v)
 
-		// byte string (0x00..0x17 bytes follow)
+	// byte string (0x00..0x17 bytes follow)
 	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57:
-		n := uint64(typ - 0x40)
+		n := uint64(typ & 0x1f)
 		err := d.decodeBytes(start, n, u, v)
 		if err != nil {
 			return err
@@ -460,7 +461,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 	// UTF-8 string (0x00..0x17 bytes follow)
 	case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77:
-		n := uint64(typ - 0x60)
+		n := uint64(typ & 0x1f)
 		return d.decodeString(start, n, u, v)
 
 	// UTF-8 string (one-byte uint8_t for n, and then n bytes follow)
@@ -501,7 +502,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 		// array (0x00..0x17 data items follow)
 	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97:
-		n := int(typ - 0x80)
+		n := int(typ & 0x1f)
 		return d.decodeArray(start, uint64(n), u, v)
 
 	// array (one-byte uint8_t for n, and then n data items follow)
@@ -542,7 +543,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 	// map (0x00..0x17 pairs of data items follow)
 	case 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7:
-		n := int(typ - 0xa0)
+		n := int(typ & 0x1f)
 		return d.decodeMap(start, uint64(n), u, v)
 
 	// map (one-byte uint8_t for n, and then n pairs of data items follow)
@@ -583,7 +584,7 @@ func (d *decodeState) decodeReflectValue(v reflect.Value) error {
 
 	// tags
 	case 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7:
-		n := TagNumber(typ - 0xc0)
+		n := TagNumber(typ & 0x1f)
 		return d.decodeTag(start, n, u, v)
 
 	// 1 bytes of tag number follow
@@ -806,35 +807,8 @@ func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) er
 }
 
 func (d *decodeState) decodeFloat16(start int, w uint16, v reflect.Value) error {
-	sign := uint64(w&0x8000) << (64 - 16)
-	exp := uint64(w>>10) & 0x1f
-	frac := uint64(w & 0x03ff)
-
-	switch {
-	case exp == 0:
-		// zero or subnormal
-		l := bits.Len64(frac)
-		if l == 0 {
-			// zero
-			exp = 0
-		} else {
-			// subnormal
-			frac = (frac << (53 - uint64(l))) & (1<<52 - 1)
-			exp = 1023 - (15 + 10) + uint64(l)
-		}
-	case exp == 0x1f:
-		// infinity or NaN
-		exp = 0x7ff
-		if frac != 0 {
-			frac = 1 << 51
-		}
-	default:
-		// normal number
-		exp += 1023 - 15
-		frac <<= 52 - 10
-	}
-	f := math.Float64frombits(sign | exp<<52 | uint64(frac))
-	return d.decodeFloat(start, f, v)
+	f := float16.FromBits(w)
+	return d.decodeFloat(start, f.Float64(), v)
 }
 
 func (d *decodeState) decodeFloat32(start int, w uint32, v reflect.Value) error {
@@ -1913,7 +1887,7 @@ func (d *decodeState) checkWellFormedChild() error {
 				d.off++
 				break
 			}
-			if typ < 0x40 || typ > 0x5b {
+			if typ&0xe0 != 0x40 {
 				return errors.New("cbor: invalid byte string")
 			}
 			if err := d.checkWellFormedChild(); err != nil {

@@ -661,7 +661,7 @@ func (s *encodeState) writeUint(major majorType, v uint64) {
 		s.writeUint32(uint32(v))
 	default:
 		s.writeByte(bits | 27)
-		s.writeUint64(uint64(v))
+		s.writeUint64(v)
 	}
 }
 
