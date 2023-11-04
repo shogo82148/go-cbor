@@ -175,7 +175,7 @@ func (s *ednDecState) decode() {
 	}
 	switch ch {
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '-':
-		// integer or float
+		// integer, float or tag
 		s.decodeNumber()
 
 	case 'N':
@@ -322,6 +322,36 @@ LOOP:
 		}
 	}
 	end := s.off
+
+	if s.off < len(s.data) {
+		if s.data[s.off] == '(' {
+			// tag
+			num, err := strconv.ParseUint(string(s.data[start:end]), 10, 64)
+			if err != nil {
+				s.err = err
+				return
+			}
+			s.writeUint(majorTypeTag, -1, num)
+
+			// decode tag content
+			s.off++
+			s.decode()
+			s.skipWhitespace()
+			if s.err != nil {
+				return
+			}
+			ch, err := s.readByte()
+			if err != nil {
+				s.err = err
+				return
+			}
+			if ch != ')' {
+				s.err = newSemanticError("cbor: expected ')'")
+				return
+			}
+			return
+		}
+	}
 
 	// try to parse as an integer
 	str := string(s.data[start:end])
