@@ -125,6 +125,19 @@ func (d *ednDecState) skipWhitespace() {
 		switch ch {
 		case ' ', '\t', '\r', '\n':
 			d.off++
+		case '/':
+			// comment
+			d.off++
+			for {
+				ch, err := d.readByte()
+				if err != nil {
+					d.err = err
+					return
+				}
+				if ch == '/' {
+					break
+				}
+			}
 		default:
 			return
 		}
