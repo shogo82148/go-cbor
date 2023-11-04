@@ -640,8 +640,8 @@ func (s *ednDecState) convertArray() {
 					s.err = newSemanticError("cbor: expected comma")
 					return
 				}
-				first = false
 			}
+			first = false
 			s.decode()
 			if s.err != nil {
 				return
@@ -734,8 +734,8 @@ func (s *ednDecState) convertMap() {
 					s.err = newSemanticError("cbor: expected comma")
 					return
 				}
-				first = false
 			}
+			first = false
 
 			// decode the key
 			s.decode()
