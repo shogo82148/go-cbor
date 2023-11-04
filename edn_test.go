@@ -123,6 +123,24 @@ func TestDecodeEDN(t *testing.T) {
 			out: RawMessage{0x5f, 0xff},
 		},
 
+		// from RFC 8610 Appendix G.3.
+		{
+			in:  "<<1>>",
+			out: RawMessage{0x41, 0x01},
+		},
+		{
+			in:  "<<1, 2>>",
+			out: RawMessage{0x42, 0x01, 0x02},
+		},
+		{
+			in:  `<<"foo", null>>`,
+			out: RawMessage{0x45, 0x63, 0x66, 0x6f, 0x6f, 0xf6},
+		},
+		{
+			in:  `<<>>`,
+			out: RawMessage{0x40},
+		},
+
 		// from RFC 8610 Appendix G.1. and G.6.
 		{
 			in:  "h'48656c6c6f20776f726c64'",

@@ -231,6 +231,9 @@ func (s *ednDecState) decode() {
 	case '\'':
 		s.convertBytes()
 
+	case '<':
+		s.convertEmbeddedCBOR()
+
 	// text string
 	case '"':
 		s.convertString()
@@ -777,6 +780,67 @@ func (s *ednDecState) convertIndefiniteString() {
 		}
 	}
 	s.writeByte(0xff)
+}
+
+func (s *ednDecState) convertEmbeddedCBOR() {
+	if !bytes.HasPrefix(s.data[s.off:], []byte("<<")) {
+		s.err = newSemanticError("cbor: invalid embedded CBOR")
+		return
+	}
+
+	// skip "<<"
+	s.off += len("<<")
+	t := &ednDecState{data: s.data, off: s.off}
+	first := true
+	for {
+		t.skipWhitespace()
+		if t.err != nil {
+			s.err = t.err
+			return
+		}
+		ch, err := t.peekByte()
+		if err != nil {
+			s.err = err
+			return
+		}
+		if ch == '>' {
+			// end of array
+			t.off++
+			break
+		}
+		if !first {
+			if ch == ',' {
+				t.off++
+			} else {
+				s.err = newSemanticError("cbor: expected comma")
+				return
+			}
+		}
+		first = false
+
+		// next element
+		t.decode()
+		if t.err != nil {
+			s.err = t.err
+			return
+		}
+	}
+	s.off = t.off
+	ch, err := s.peekByte()
+	if err != nil {
+		s.err = err
+		return
+	}
+	if ch != '>' {
+		s.err = newSemanticError("cbor: expected '>'")
+		return
+	}
+	s.off++
+
+	ind := s.decodeEncodingIndicator()
+	s.writeUint(majorTypeBytes, ind, uint64(t.buf.Len()))
+	t.buf.WriteTo(&s.buf)
+
 }
 
 func (s *ednDecState) convertArray() {
