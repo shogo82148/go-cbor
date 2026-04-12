@@ -249,7 +249,7 @@ func newTypeEncoder(t reflect.Type) encoderFunc {
 		return mapEncoder
 	case reflect.Interface:
 		return interfaceEncoder
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return newPtrEncoder(t)
 	case reflect.Struct:
 		return newStructEncoder(t)
