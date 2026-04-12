@@ -74,7 +74,7 @@ type RawTag struct {
 // Decode decodes the tag content.
 func (tag RawTag) Decode(v any, opts Options) error {
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return &InvalidUnmarshalError{reflect.TypeOf(v)}
 	}
 	return tag.decodeReflectValue(rv.Elem(), opts)

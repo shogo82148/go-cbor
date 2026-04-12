@@ -294,7 +294,7 @@ func indirect(v reflect.Value, decodingNull bool) (Unmarshaler, reflect.Value) {
 
 func (d *decodeState) decode(v any) error {
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return &InvalidUnmarshalError{reflect.TypeOf(v)}
 	}
 	return d.decodeReflectValue(rv)
@@ -713,7 +713,7 @@ func (d *decodeState) setAny(start int, value string, w any, v reflect.Value) er
 		v.Set(rw)
 		return nil
 	}
-	if tw.Kind() == reflect.Ptr && tw.Elem() == tv {
+	if tw.Kind() == reflect.Pointer && tw.Elem() == tv {
 		v.Set(rw.Elem())
 		return nil
 	}
@@ -1722,7 +1722,7 @@ func (d *decodeState) setNull(start int, v reflect.Value) error {
 	}
 
 	switch v.Kind() {
-	case reflect.Interface, reflect.Ptr, reflect.Map, reflect.Slice:
+	case reflect.Interface, reflect.Pointer, reflect.Map, reflect.Slice:
 		v.Set(reflect.Zero(v.Type()))
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "null", Type: v.Type(), Offset: int64(start)})
@@ -1739,7 +1739,7 @@ func (d *decodeState) setUndefined(start int, v reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Interface:
 		v.Set(reflect.ValueOf(Undefined))
-	case reflect.Ptr, reflect.Map, reflect.Slice:
+	case reflect.Pointer, reflect.Map, reflect.Slice:
 		v.Set(reflect.Zero(v.Type()))
 	default:
 		d.saveError(&UnmarshalTypeError{Value: "undefined", Type: v.Type(), Offset: int64(start)})
