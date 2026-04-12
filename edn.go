@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
-	"github.com/shogo82148/float16"
+	"github.com/shogo82148/floats"
 )
 
 type encodingIndicator int
@@ -370,7 +370,7 @@ LOOP:
 
 	if ind == 1 {
 		// float16
-		f, err := float16.Parse(str)
+		f, err := floats.ParseFloat16(str)
 		if err != nil {
 			s.err = err
 			return
@@ -1658,8 +1658,8 @@ func (s *ednEncState) encode() {
 			s.err = err
 			return
 		}
-		f := float16.FromBits(w)
-		s.convertFloat(f.Float64())
+		f := floats.NewFloat16FromBits(w)
+		s.convertFloat(f.Float64().BuiltIn())
 
 	// single-precision float (four-byte IEEE 754)
 	case 0xfa:
