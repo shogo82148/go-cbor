@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/shogo82148/float16"
+	"github.com/shogo82148/floats"
 )
 
 // Unmarshaler is the interface implemented by types that can unmarshal a CBOR description of themselves.
@@ -807,8 +807,8 @@ func (d *decodeState) decodeNegativeInt(start int, w uint64, v reflect.Value) er
 }
 
 func (d *decodeState) decodeFloat16(start int, w uint16, v reflect.Value) error {
-	f := float16.FromBits(w)
-	return d.decodeFloat(start, f.Float64(), v)
+	f := floats.NewFloat16FromBits(w)
+	return d.decodeFloat(start, f.Float64().BuiltIn(), v)
 }
 
 func (d *decodeState) decodeFloat32(start int, w uint32, v reflect.Value) error {
