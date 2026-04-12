@@ -1013,7 +1013,9 @@ LOOP:
 		if !d.isAvailable(n) {
 			return ErrUnexpectedEnd
 		}
-		w.Write(d.data[d.off : d.off+int(n)])
+		if _, err := w.Write(d.data[d.off : d.off+int(n)]); err != nil {
+			return err
+		}
 		d.off += int(n)
 	}
 	if u != nil {
