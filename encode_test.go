@@ -883,14 +883,18 @@ func TestMarshal_NaN(t *testing.T) {
 
 func BenchmarkMarshal_Uint64(b *testing.B) {
 	r := newXorshift64()
-	for i := 0; i < b.N; i++ {
-		Marshal(r.Uint64())
+	for b.Loop() {
+		if _, err := Marshal(r.Uint64()); err != nil {
+			b.Errorf("Marshal() error = %v", err)
+		}
 	}
 }
 
 func BenchmarkMarshal_Int64(b *testing.B) {
 	r := newXorshift64()
-	for i := 0; i < b.N; i++ {
-		Marshal(int64(r.Uint64()))
+	for b.Loop() {
+		if _, err := Marshal(int64(r.Uint64())); err != nil {
+			b.Errorf("Marshal() error = %v", err)
+		}
 	}
 }

@@ -841,8 +841,10 @@ func (s *ednDecState) convertEmbeddedCBOR() {
 
 	ind := s.decodeEncodingIndicator()
 	s.writeUint(majorTypeBytes, ind, uint64(t.buf.Len()))
-	t.buf.WriteTo(&s.buf)
-
+	if _, err := t.buf.WriteTo(&s.buf); err != nil {
+		s.err = err
+		return
+	}
 }
 
 func (s *ednDecState) convertArray() {
@@ -936,7 +938,10 @@ func (s *ednDecState) convertArray() {
 	}
 	s.off = t.off
 	s.writeUint(majorTypeArray, ind, count)
-	t.buf.WriteTo(&s.buf)
+	if _, err := t.buf.WriteTo(&s.buf); err != nil {
+		s.err = err
+		return
+	}
 }
 
 func (s *ednDecState) convertMap() {
@@ -1069,7 +1074,10 @@ func (s *ednDecState) convertMap() {
 	}
 	s.off = t.off
 	s.writeUint(majorTypeMap, ind, count)
-	t.buf.WriteTo(&s.buf)
+	if _, err := t.buf.WriteTo(&s.buf); err != nil {
+		s.err = err
+		return
+	}
 }
 
 func (s *ednDecState) convertSimple() {
