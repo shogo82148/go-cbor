@@ -400,6 +400,11 @@ func (tag RawTag) decodeReflectValue(rv reflect.Value, opts Options) error {
 		if err != nil {
 			return wrapSemanticError("cbor: invalid URI", err)
 		}
+		// Ensure the normalized form remains parseable. Some non-canonical
+		// values can be accepted by url.Parse but fail after String() round-trip.
+		if _, err := url.Parse(u.String()); err != nil {
+			return wrapSemanticError("cbor: invalid URI", err)
+		}
 
 		t := rv.Type()
 		switch {

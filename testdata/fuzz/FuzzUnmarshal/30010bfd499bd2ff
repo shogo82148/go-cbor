@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\xd8 tA0://[::0%25֩]#0000")
